@@ -47,7 +47,7 @@ const BASE_HEIGHT = 0.2;
 const MAX_HEIGHT_SCALE = 3;
 
 let currentData = null;
-let currentTheme = 'classic';
+let currentTheme = 'isometric';
 let isTransitioning = false;
 let idleTime = 0;
 
@@ -171,8 +171,9 @@ function parseURLAndLoad() {
 
   if (theme && THEMES[theme]) {
     currentTheme = theme;
-    if (themeSelect) themeSelect.value = theme;
   }
+  
+  if (themeSelect) themeSelect.value = currentTheme;
   
   setTheme(currentTheme, true); // initial load without fadeout
 

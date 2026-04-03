@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = (process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
 
   if (!token) {
     return res.status(500).json({ error: 'GitHub token is missing. Set GH_TOKEN in Vercel Environment Variables.' });

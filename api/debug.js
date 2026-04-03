@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = (process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
   
   if (!token) {
     return res.status(200).json({ 
