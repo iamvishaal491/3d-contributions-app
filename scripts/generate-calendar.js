@@ -99,56 +99,33 @@ function buildSVG(calendar) {
       const xOffset = wIndex - weeks.length / 2;
       const yOffset = dIndex - 3.5;
       
-      const isoX = parseFloat(((xOffset - yOffset) * DX).toFixed(2));
-      const isoY = parseFloat(((xOffset + yOffset) * DY).toFixed(2));
+      const isoX = Math.round((xOffset - yOffset) * DX);
+      const isoY = Math.round((xOffset + yOffset) * DY);
       
       let rawHeight = 2;
       if (day.contributionCount > 0) {
         const ratio = Math.log(day.contributionCount + 1) / Math.log(maxCount + 1);
-        rawHeight = parseFloat((2 + (ratio * MAX_HEIGHT_SCALE * 14)).toFixed(2));
+        rawHeight = Math.round(2 + (ratio * MAX_HEIGHT_SCALE * 14));
       }
 
-      const topPts = [
-        `${isoX},${(isoY - rawHeight).toFixed(2)}`,
-        `${(isoX + DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
-        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
-        `${(isoX - DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`
-      ].join(' ');
+      const topPts = `${isoX},${isoY - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX - Math.round(DX)},${isoY + Math.round(DY) - rawHeight}`;
+      const leftPts = `${isoX - Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY)} ${isoX - Math.round(DX)},${isoY + Math.round(DY)}`;
+      const rightPts = `${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY)} ${isoX},${isoY + 2 * Math.round(DY)}`;
 
-      const leftPts = [
-        `${(isoX - DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
-        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
-        `${isoX.toFixed(2)},${(isoY + 2 * DY).toFixed(2)}`,
-        `${(isoX - DX).toFixed(2)},${(isoY + DY).toFixed(2)}`
-      ].join(' ');
-
-      const rightPts = [
-        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
-        `${(isoX + DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
-        `${(isoX + DX).toFixed(2)},${(isoY + DY).toFixed(2)}`,
-        `${isoX.toFixed(2)},${(isoY + 2 * DY).toFixed(2)}`
-      ].join(' ');
-
-      svgElements.push(`<g id="day-${day.date}">
-<polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}" stroke="${COLOR_LEFT[tier]}" stroke-width="0.1"/>
-<polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}" stroke="${COLOR_RIGHT[tier]}" stroke-width="0.1"/>
-<polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}" stroke="${COLOR_LEVELS[tier]}" stroke-width="0.1"/>
-</g>`);
+      svgElements.push(`<g id="d-${day.date}"><polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}"/><polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}"/><polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}"/></g>`);
     });
   });
 
   const boundingW = Math.ceil(DX * (weeks.length + 8));
   const boundingH = Math.ceil(DY * (weeks.length + 8) + (MAX_HEIGHT_SCALE * 14) + 50);
-
   const vBoxX = Math.floor(-boundingW / 2);
   const vBoxY = Math.floor(-boundingH / 2 - 10);
 
-  const xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>';
   const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vBoxX} ${vBoxY} ${boundingW} ${boundingH}" width="${boundingW}" height="${boundingH}">`;
-  const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${boundingW}" height="${boundingH}" fill="transparent"/>`;
+  const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${boundingW}" height="${boundingH}" fill="none"/>`;
   const svgClose = '</svg>';
   
-  return [xmlHeader, svgOpen, bg, ...svgElements, svgClose].join('\n');
+  return (svgOpen + bg + svgElements.join('') + svgClose).trim();
 }
 
 async function main() {
