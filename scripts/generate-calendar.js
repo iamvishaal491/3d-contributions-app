@@ -17,10 +17,10 @@ const COLOR_LEVELS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']; //
 const COLOR_LEFT =   ['#d1d5da', '#7dd88f', '#2fb353', '#238a42', '#18592d']; // Shaded left faces
 const COLOR_RIGHT =  ['#e1e4e8', '#8ce29d', '#3bc95c', '#299648', '#1c6333']; // Lightly shaded right faces
 
-const CUBE_SIZE = 12;
-const MAX_HEIGHT_SCALE = 4;
-const DX = CUBE_SIZE * Math.cos(Math.PI / 6); // ~10.392
-const DY = CUBE_SIZE * Math.sin(Math.PI / 6); // ~6.0
+const CUBE_SIZE = 16;
+const MAX_HEIGHT_SCALE = 5;
+const DX = CUBE_SIZE * Math.cos(Math.PI / 6); 
+const DY = CUBE_SIZE * Math.sin(Math.PI / 6);
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'output');
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'isometric-calendar.svg');
@@ -144,13 +144,13 @@ function buildSVG(calendar) {
     });
   });
 
-  const calendarWidth = Math.ceil(DX * (weeks.length + 8));
-  const statsWidth = 280;
+  const calendarWidth = Math.ceil(DX * (weeks.length + 2));
+  const statsWidth = 260;
   const totalW = calendarWidth + statsWidth;
-  const totalH = Math.ceil(DY * (weeks.length + 8) + (MAX_HEIGHT_SCALE * 14) + 120);
+  const totalH = Math.ceil(DY * (weeks.length + 4) + (MAX_HEIGHT_SCALE * 14) + 20);
   
-  const vBoxX = Math.floor(-calendarWidth / 2);
-  const vBoxY = Math.floor(-totalH / 2);
+  const vBoxX = Math.floor(-calendarWidth / 2) - 10;
+  const vBoxY = Math.floor(-totalH / 2) + 20;
 
   // 📝 Helpers for Icons
   function drawIcon(svgElements, x, y, color) {
@@ -168,42 +168,34 @@ function buildSVG(calendar) {
   const highestIcon = '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
   const avgIcon = '<polyline points="16 18 20 14 24 18"/><polyline points="8 6 4 10 0 6"/><line x1="20" y1="14" x2="20" y2="22"/><line x1="4" y1="10" x2="4" y2="2"/><line x1="12" y1="12" x2="12" y2="12"/>';
 
-  const fontStack = "'Arial Narrow', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+  const fontStack = "'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
   const textStyle = `fill:#8b949e; font-family:${fontStack}; font-size:14px;`;
   const labelStyle = `fill:#58a6ff; font-weight:600; font-family:${fontStack}; font-size:15px;`;
   
-  // 📝 Title Layout
-  const titleSection = `
-    <g transform="translate(${vBoxX + 40}, ${vBoxY + 30})">
-      ${drawIcon(calendarIcon, 0, 0, titleIconColor)}
-      <text x="22" y="3" style="${labelStyle}">Contributions calendar</text>
-    </g>
-  `;
-
   // 📝 Stats Sidebar Logic
-  const statsX = Math.floor(calendarWidth / 2) + 20;
-  const statsY = -40;
+  const statsX = Math.floor(calendarWidth / 2) + 10;
+  const statsY = -20;
 
   const statsSection = `
     <g transform="translate(${statsX}, ${statsY})">
       ${drawIcon(stacksIcon, 0, 0, titleIconColor)}
-      <text x="22" y="3" style="${labelStyle}">Commits streaks</text>
+      <text x="22" y="4" style="${labelStyle}">Commits streaks</text>
       
       ${drawIcon(flameIcon, 0, 28, primaryIconColor)}
-      <text x="22" y="31" style="${textStyle}">Current streak ${currentStreak} day${currentStreak !== 1 ? 's' : ''}</text>
+      <text x="22" y="32" style="${textStyle}">Current streak ${currentStreak} day${currentStreak !== 1 ? 's' : ''}</text>
       
       ${drawIcon(starIcon, 0, 56, primaryIconColor)}
-      <text x="22" y="59" style="${textStyle}">Best streak ${bestStreak} days</text>
+      <text x="22" y="60" style="${textStyle}">Best streak ${bestStreak} days</text>
       
-      <g transform="translate(0, 40)">
+      <g transform="translate(0, 45)">
         ${drawIcon(nodeIcon, 0, 60, titleIconColor)}
-        <text x="22" y="63" style="${labelStyle}">Commits per day</text>
+        <text x="22" y="64" style="${labelStyle}">Commits per day</text>
         
         ${drawIcon(highestIcon, 0, 88, primaryIconColor)}
-        <text x="22" y="91" style="${textStyle}">Highest in a day at ${maxCount}</text>
+        <text x="22" y="92" style="${textStyle}">Highest in a day at ${maxCount}</text>
         
         ${drawIcon(avgIcon, 0, 116, primaryIconColor)}
-        <text x="22" y="119" style="${textStyle}">Average per day at ~${avgPerDay}</text>
+        <text x="22" y="120" style="${textStyle}">Average per day at ~${avgPerDay}</text>
       </g>
     </g>
   `;
@@ -212,7 +204,7 @@ function buildSVG(calendar) {
   const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${totalW}" height="${totalH}" fill="none"/>`;
   const svgClose = '</svg>';
   
-  return (svgOpen + bg + titleSection + svgElements.join('') + statsSection + svgClose).replace(/>\s+</g, '><').trim();
+  return (svgOpen + bg + svgElements.join('') + statsSection + svgClose).replace(/>\s+</g, '><').trim();
 }
 
 async function main() {
