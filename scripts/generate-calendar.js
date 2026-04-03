@@ -112,7 +112,7 @@ function buildSVG(calendar) {
   const svgElements = [];
   const STROKE_COLOR = 'rgba(27,31,35,0.1)'; 
   const STROKE_WIDTH = '0.5';
-  const GRID_STROKE = 'rgba(0,0,0,0.2)';
+  const GRID_STROKE = '#d0d7de';
   const GRID_STROKE_WIDTH = '1';
   weeks.forEach((week, wIndex) => {
     week.contributionDays.forEach((day, dIndex) => {
