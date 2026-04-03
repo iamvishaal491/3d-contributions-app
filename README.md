@@ -65,7 +65,7 @@ This static isometric SVG is auto-generated daily by a GitHub Actions workflow a
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/iamvishaal491/3d-contributions/main/output/isometric-calendar.svg" alt="3D Isometric Contribution Calendar" />
+<img src="https://raw.githubusercontent.com/iamvishaal491/3d-contributions-app/main/output/isometric-calendar.svg" alt="3D Isometric Contribution Calendar" />
 
 <br><br>
 

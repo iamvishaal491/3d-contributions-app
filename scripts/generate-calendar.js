@@ -110,8 +110,10 @@ function buildSVG(calendar) {
   const avgPerDay = (totalCount / dayCount).toFixed(2);
 
   const svgElements = [];
-  const STROKE_COLOR = 'rgba(0, 0, 0, 0.8)'; 
-  const STROKE_WIDTH = '1.5';
+  const STROKE_COLOR = 'rgba(27,31,35,0.1)'; 
+  const STROKE_WIDTH = '0.5';
+  const GRID_STROKE = 'rgba(0,0,0,0.2)';
+  const GRID_STROKE_WIDTH = '1';
   weeks.forEach((week, wIndex) => {
     week.contributionDays.forEach((day, dIndex) => {
       const tier = getTier(day.contributionCount, maxCount);
@@ -121,17 +123,24 @@ function buildSVG(calendar) {
       const isoX = Math.round((xOffset - yOffset) * DX);
       const isoY = Math.round((xOffset + yOffset) * DY);
       
-      let rawHeight = 2;
+      let rawHeight = 0;
       if (day.contributionCount > 0) {
         const ratio = Math.log(day.contributionCount + 1) / Math.log(maxCount + 1);
         rawHeight = Math.round(2 + (ratio * MAX_HEIGHT_SCALE * 14));
       }
 
       const topPts = `${isoX},${isoY - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX - Math.round(DX)},${isoY + Math.round(DY) - rawHeight}`;
-      const leftPts = `${isoX - Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY)} ${isoX - Math.round(DX)},${isoY + Math.round(DY)}`;
-      const rightPts = `${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY)} ${isoX},${isoY + 2 * Math.round(DY)}`;
-
-      svgElements.push(`<g id="d-${day.date}"><polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/><polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/><polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/></g>`);
+      
+      if (day.contributionCount === 0) {
+        // Flat grid base for empty days
+        svgElements.push(`<g id="d-${day.date}"><polygon points="${topPts}" fill="${COLOR_LEVELS[0]}" stroke="${GRID_STROKE}" stroke-width="${GRID_STROKE_WIDTH}" stroke-linejoin="round"/></g>`);
+      } else {
+        // 3D Cube for active days
+        const leftPts = `${isoX - Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX},${isoY + 2 * Math.round(DY)} ${isoX - Math.round(DX)},${isoY + Math.round(DY)}`;
+        const rightPts = `${isoX},${isoY + 2 * Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY) - rawHeight} ${isoX + Math.round(DX)},${isoY + Math.round(DY)} ${isoX},${isoY + 2 * Math.round(DY)}`;
+        
+        svgElements.push(`<g id="d-${day.date}"><polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/><polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/><polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}" stroke="${STROKE_COLOR}" stroke-width="${STROKE_WIDTH}" stroke-linejoin="round"/></g>`);
+      }
     });
   });
 
