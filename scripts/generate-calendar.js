@@ -144,12 +144,12 @@ function buildSVG(calendar) {
     });
   });
 
-  const calendarWidth = Math.ceil(DX * (weeks.length + 2));
+  const calendarWidth = Math.ceil(DX * (weeks.length + 4)); // Added extra horizontal padding
   const totalW = calendarWidth;
-  const totalH = Math.ceil(DY * (weeks.length + 4) + (MAX_HEIGHT_SCALE * 14) + 40);
+  const totalH = Math.ceil(DY * (weeks.length + 6) + (MAX_HEIGHT_SCALE * 14) + 120); // Massive vertical padding to prevent top/bottom cuts
   
   const vBoxX = Math.floor(-calendarWidth / 2);
-  const vBoxY = Math.floor(-totalH / 2) + 20;
+  const vBoxY = Math.floor(-totalH / 2); // No shift, perfect center alignment
 
   const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vBoxX} ${vBoxY} ${totalW} ${totalH}" width="${totalW}" height="${totalH}">`;
   const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${totalW}" height="${totalH}" fill="none"/>`;
