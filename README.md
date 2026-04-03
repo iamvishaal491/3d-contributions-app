@@ -56,3 +56,42 @@ Once deployed, you can add a link to this visualizer in your GitHub Profile (`us
 
 ### Note on Previews
 Because this application relies on WebGL (Three.js), it requires an interactive browser session and cannot be embedded purely as an image in Markdown without an iframe (which GitHub does not allow). Thus, using a polished link button is the best method to drive traffic.
+
+---
+
+## 🧊 3D Contribution Calendar
+
+This static isometric SVG is auto-generated daily by a GitHub Actions workflow and embedded directly into any GitHub README.
+
+<div align="center">
+
+<img src="./output/isometric-calendar.svg" alt="3D Isometric Contribution Calendar" />
+
+<br><br>
+
+[![View Interactive 3D](https://img.shields.io/badge/View_Interactive_3D-Experience-22c55e?style=for-the-badge&logo=threedotjs&logoColor=white)](https://3d-contributions-app.vercel.app/?username=iamvishaal491)
+
+</div>
+
+---
+
+## ⚙️ Automated SVG Setup
+
+The `output/isometric-calendar.svg` is generated automatically via `scripts/generate-calendar.js`.
+
+### One-time Setup — Add Repository Secret
+
+1. Go to your repository on GitHub.
+2. Navigate to **Settings → Secrets and variables → Actions → New repository secret**.
+3. Add the following secret:
+   - **Name:** `GITHUB_TOKEN`
+   - **Value:** A Personal Access Token (PAT) with the following scopes:
+     - `read:user`
+     - `repo`
+
+> **Why `repo`?** The workflow needs write access to commit the generated SVG back to the repository.
+
+### Running the Workflow
+
+- **Automatic:** Runs every day at midnight UTC via cron schedule.
+- **Manual:** Go to **Actions → Generate Isometric Calendar SVG → Run workflow**.
