@@ -145,66 +145,17 @@ function buildSVG(calendar) {
   });
 
   const calendarWidth = Math.ceil(DX * (weeks.length + 2));
-  const statsWidth = 260;
-  const totalW = calendarWidth + statsWidth;
-  const totalH = Math.ceil(DY * (weeks.length + 4) + (MAX_HEIGHT_SCALE * 14) + 20);
+  const totalW = calendarWidth;
+  const totalH = Math.ceil(DY * (weeks.length + 4) + (MAX_HEIGHT_SCALE * 14) + 40);
   
-  const vBoxX = Math.floor(-calendarWidth / 2) - 10;
+  const vBoxX = Math.floor(-calendarWidth / 2);
   const vBoxY = Math.floor(-totalH / 2) + 20;
-
-  // 📝 Helpers for Icons
-  function drawIcon(svgElements, x, y, color) {
-    return `<g transform="translate(${x}, ${y - 12}) scale(0.65)" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgElements}</g>`;
-  }
-
-  const primaryIconColor = '#8b949e'; 
-  const titleIconColor = '#58a6ff'; 
-
-  const calendarIcon = '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>';
-  const stacksIcon = '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>';
-  const flameIcon = '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.242.062-4.966.24-.606.012-.872-.25-.688A10.02 10.02 0 0 0 5 11c0 3.866 3.134 7 7 7s7-3.134 7-7a9.972 9.972 0 0 0-2.312-6.342c-.227-.272-.619-.244-.543.085.344 1.5.097 3.551-1.145 5.257"/>';
-  const starIcon = '<circle cx="12" cy="12" r="3"/><path d="M12 5V3M12 21v-2M5 12H3M21 12h-2M6.343 17.657l-1.414 1.414M19.07 4.93l-1.414 1.414M17.657 17.657l1.414 1.414M4.93 4.93l1.414 1.414"/>';
-  const nodeIcon = '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/>';
-  const highestIcon = '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
-  const avgIcon = '<polyline points="16 18 20 14 24 18"/><polyline points="8 6 4 10 0 6"/><line x1="20" y1="14" x2="20" y2="22"/><line x1="4" y1="10" x2="4" y2="2"/><line x1="12" y1="12" x2="12" y2="12"/>';
-
-  const fontStack = "'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif";
-  const textStyle = `fill:#8b949e; font-family:${fontStack}; font-size:14px;`;
-  const labelStyle = `fill:#58a6ff; font-weight:600; font-family:${fontStack}; font-size:15px;`;
-  
-  // 📝 Stats Sidebar Logic
-  const statsX = Math.floor(calendarWidth / 2) + 10;
-  const statsY = -20;
-
-  const statsSection = `
-    <g transform="translate(${statsX}, ${statsY})">
-      ${drawIcon(stacksIcon, 0, 0, titleIconColor)}
-      <text x="22" y="4" style="${labelStyle}">Commits streaks</text>
-      
-      ${drawIcon(flameIcon, 0, 28, primaryIconColor)}
-      <text x="22" y="32" style="${textStyle}">Current streak ${currentStreak} day${currentStreak !== 1 ? 's' : ''}</text>
-      
-      ${drawIcon(starIcon, 0, 56, primaryIconColor)}
-      <text x="22" y="60" style="${textStyle}">Best streak ${bestStreak} days</text>
-      
-      <g transform="translate(0, 45)">
-        ${drawIcon(nodeIcon, 0, 60, titleIconColor)}
-        <text x="22" y="64" style="${labelStyle}">Commits per day</text>
-        
-        ${drawIcon(highestIcon, 0, 88, primaryIconColor)}
-        <text x="22" y="92" style="${textStyle}">Highest in a day at ${maxCount}</text>
-        
-        ${drawIcon(avgIcon, 0, 116, primaryIconColor)}
-        <text x="22" y="120" style="${textStyle}">Average per day at ~${avgPerDay}</text>
-      </g>
-    </g>
-  `;
 
   const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vBoxX} ${vBoxY} ${totalW} ${totalH}" width="${totalW}" height="${totalH}">`;
   const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${totalW}" height="${totalH}" fill="none"/>`;
   const svgClose = '</svg>';
   
-  return (svgOpen + bg + svgElements.join('') + statsSection + svgClose).replace(/>\s+</g, '><').trim();
+  return (svgOpen + bg + svgElements.join('') + svgClose).replace(/>\s+</g, '><').trim();
 }
 
 async function main() {
