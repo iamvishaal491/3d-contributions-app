@@ -168,8 +168,9 @@ function buildSVG(calendar) {
   const highestIcon = '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
   const avgIcon = '<polyline points="16 18 20 14 24 18"/><polyline points="8 6 4 10 0 6"/><line x1="20" y1="14" x2="20" y2="22"/><line x1="4" y1="10" x2="4" y2="2"/><line x1="12" y1="12" x2="12" y2="12"/>';
 
-  const textStyle = 'fill:#8b949e; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji; font-size:14px;';
-  const labelStyle = 'fill:#58a6ff; font-weight:400; font-family:inherit; font-size:16px;';
+  const fontStack = '"Arial Narrow", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+  const textStyle = `fill:#8b949e; font-family:${fontStack}; font-size:14px;`;
+  const labelStyle = `fill:#58a6ff; font-weight:600; font-family:${fontStack}; font-size:15px;`;
   
   // 📝 Title Layout
   const titleSection = `
