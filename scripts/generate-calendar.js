@@ -91,71 +91,64 @@ function buildSVG(calendar) {
     });
   });
 
-  let svgElements = [];
+  const svgElements = [];
   
-  // Back-to-front rendering loop
   weeks.forEach((week, wIndex) => {
     week.contributionDays.forEach((day, dIndex) => {
       const tier = getTier(day.contributionCount, maxCount);
-      
-      // Calculate Isometric Roots
-      // Offset by number of weeks to center the grid
       const xOffset = wIndex - weeks.length / 2;
       const yOffset = dIndex - 3.5;
       
-      const isoX = (xOffset - yOffset) * DX;
-      const isoY = (xOffset + yOffset) * DY;
+      const isoX = parseFloat(((xOffset - yOffset) * DX).toFixed(2));
+      const isoY = parseFloat(((xOffset + yOffset) * DY).toFixed(2));
       
-      // Calculate Z height
-      let rawHeight = 2; // Flat block height for 0 contributions
+      let rawHeight = 2;
       if (day.contributionCount > 0) {
         const ratio = Math.log(day.contributionCount + 1) / Math.log(maxCount + 1);
-        rawHeight = 2 + (ratio * MAX_HEIGHT_SCALE * 14); // Amplify Z scale
+        rawHeight = parseFloat((2 + (ratio * MAX_HEIGHT_SCALE * 14)).toFixed(2));
       }
 
-      // Vertices for Top Polygon
       const topPts = [
-        `${isoX},${isoY - rawHeight}`,
-        `${isoX + DX},${isoY + DY - rawHeight}`,
-        `${isoX},${isoY + 2 * DY - rawHeight}`,
-        `${isoX - DX},${isoY + DY - rawHeight}`
+        `${isoX},${(isoY - rawHeight).toFixed(2)}`,
+        `${(isoX + DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
+        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
+        `${(isoX - DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`
       ].join(' ');
 
-      // Vertices for Left Polygon
       const leftPts = [
-        `${isoX - DX},${isoY + DY - rawHeight}`,
-        `${isoX},${isoY + 2 * DY - rawHeight}`,
-        `${isoX},${isoY + 2 * DY}`,
-        `${isoX - DX},${isoY + DY}`
+        `${(isoX - DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
+        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
+        `${isoX.toFixed(2)},${(isoY + 2 * DY).toFixed(2)}`,
+        `${(isoX - DX).toFixed(2)},${(isoY + DY).toFixed(2)}`
       ].join(' ');
 
-      // Vertices for Right Polygon
       const rightPts = [
-        `${isoX},${isoY + 2 * DY - rawHeight}`,
-        `${isoX + DX},${isoY + DY - rawHeight}`,
-        `${isoX + DX},${isoY + DY}`,
-        `${isoX},${isoY + 2 * DY}`
+        `${isoX.toFixed(2)},${(isoY + 2 * DY - rawHeight).toFixed(2)}`,
+        `${(isoX + DX).toFixed(2)},${(isoY + DY - rawHeight).toFixed(2)}`,
+        `${(isoX + DX).toFixed(2)},${(isoY + DY).toFixed(2)}`,
+        `${isoX.toFixed(2)},${(isoY + 2 * DY).toFixed(2)}`
       ].join(' ');
 
-      // Paint block
-      svgElements.push(`
-        <g id="day-${day.date}">
-          <polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}" stroke="${COLOR_LEFT[tier]}" stroke-width="0.5"/>
-          <polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}" stroke="${COLOR_RIGHT[tier]}" stroke-width="0.5"/>
-          <polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}" stroke="${COLOR_LEVELS[tier]}" stroke-width="0.5"/>
-        </g>
-      `);
+      svgElements.push(`<g id="day-${day.date}">
+<polygon points="${leftPts}" fill="${COLOR_LEFT[tier]}" stroke="${COLOR_LEFT[tier]}" stroke-width="0.1"/>
+<polygon points="${rightPts}" fill="${COLOR_RIGHT[tier]}" stroke="${COLOR_RIGHT[tier]}" stroke-width="0.1"/>
+<polygon points="${topPts}" fill="${COLOR_LEVELS[tier]}" stroke="${COLOR_LEVELS[tier]}" stroke-width="0.1"/>
+</g>`);
     });
   });
 
-  // Calculate generic bounding box
-  const boundingW = DX * (weeks.length + 7) + 100;
-  const boundingH = DY * (weeks.length + 7) + (MAX_HEIGHT_SCALE * 14) + 100;
+  const boundingW = Math.ceil(DX * (weeks.length + 8));
+  const boundingH = Math.ceil(DY * (weeks.length + 8) + (MAX_HEIGHT_SCALE * 14) + 50);
 
-  const svgHead = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-boundingW/2} ${-boundingH/4 - 100} ${boundingW} ${boundingH}" width="100%" height="auto">`;
-  const svgTail = `</svg>`;
+  const vBoxX = Math.floor(-boundingW / 2);
+  const vBoxY = Math.floor(-boundingH / 2 - 10);
+
+  const xmlHeader = '<?xml version="1.0" encoding="UTF-8"?>';
+  const svgOpen = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vBoxX} ${vBoxY} ${boundingW} ${boundingH}" width="${boundingW}" height="${boundingH}">`;
+  const bg = `<rect x="${vBoxX}" y="${vBoxY}" width="${boundingW}" height="${boundingH}" fill="transparent"/>`;
+  const svgClose = '</svg>';
   
-  return [svgHead, ...svgElements, svgTail].join('\n');
+  return [xmlHeader, svgOpen, bg, ...svgElements, svgClose].join('\n');
 }
 
 async function main() {
