@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D GitHub Contribution Visualizer</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- UI Overlay for controls and search -->
+    <div id="ui-layer">
+      <div class="header">
+        <h1>3D GitHub Contributions</h1>
+        <div class="search-container">
+          <form id="search-form">
+            <input type="text" id="username-input" placeholder="Enter GitHub Username" required />
+            <button type="submit" id="search-btn">Visualize</button>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Instructions / Status -->
+      <div id="status-message" class="status">Enter a GitHub username to view their 3D contribution graph.</div>
+      
+      <!-- Tooltip for hover interaction -->
+      <div id="tooltip" class="tooltip hidden">
+        <div id="tooltip-date"></div>
+        <div id="tooltip-count"></div>
+      </div>
+    </div>
+
+    <!-- Container for Three.js Canvas -->
+    <div id="canvas-container"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
