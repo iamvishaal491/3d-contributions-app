@@ -7,34 +7,42 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <!-- UI Overlay for controls and search -->
+    <!-- Premium UI Overlay -->
     <div id="ui-layer">
-      <div class="header">
+      <div class="glass-panel header">
         <h1>3D GitHub Contributions</h1>
-        <div class="search-container">
-          <form id="search-form">
+        
+        <form id="search-form" class="controls-row">
+          <div class="input-group">
             <input type="text" id="username-input" placeholder="Enter GitHub Username" required />
-            <button type="submit" id="search-btn">Visualize</button>
-          </form>
-        </div>
-        <div class="theme-selector">
-          <button data-theme="classic" class="theme-btn active">Classic 3D</button>
-          <button data-theme="isometric" class="theme-btn">Isometric</button>
-          <button data-theme="skyline" class="theme-btn">Skyline City</button>
-        </div>
+          </div>
+          
+          <div class="input-group select-wrapper">
+            <select id="theme-select" aria-label="Select Theme">
+              <option value="classic">Classic 3D</option>
+              <option value="isometric">Isometric</option>
+              <option value="skyline">Skyline City</option>
+            </select>
+          </div>
+          
+          <button type="submit" id="search-btn">Visualize</button>
+        </form>
       </div>
       
-      <!-- Instructions / Status -->
-      <div id="status-message" class="status">Enter a GitHub username to view their 3D contribution graph.</div>
+      <!-- Status Box -->
+      <div id="status-message" class="glass-panel status">Ready to visualize.</div>
       
-      <!-- Tooltip for hover interaction -->
-      <div id="tooltip" class="tooltip hidden">
+      <!-- Interactive Tooltip -->
+      <div id="tooltip" class="glass-panel tooltip hidden">
         <div id="tooltip-date"></div>
         <div id="tooltip-count"></div>
       </div>
     </div>
 
-    <!-- Container for Three.js Canvas -->
+    <!-- Cinematic Fade Overlay -->
+    <div id="scene-transition-overlay"></div>
+
+    <!-- 3D Canvas -->
     <div id="canvas-container"></div>
 
     <script type="module" src="/src/main.js"></script>
