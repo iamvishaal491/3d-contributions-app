@@ -47,7 +47,6 @@ export function Header({
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           <option value="isometric">Isometric</option>
-          <option value="classic">Classic 3D</option>
           <option value="skyline">Skyline City</option>
         </select>
 
