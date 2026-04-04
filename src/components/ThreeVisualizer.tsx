@@ -336,7 +336,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   };
 
   // ── Trail factory with per-vertex alpha fade ───────────────
-  const TRAIL_LEN = 28;
+  const TRAIL_LEN = 40;
   const makeTrail = (color: number): THREE.Line => {
     const positions = new Float32Array(TRAIL_LEN * 3);
     const alphas    = new Float32Array(TRAIL_LEN);
@@ -393,26 +393,51 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     if (themeRef.current !== 'skyline') return;
     const builders = [buildInterceptor, buildHoverDrone, buildTriWingScout, buildCoreFrameShip];
     const trailColors = [0x00bbdd, 0x8800cc, 0x44dd88, 0xdd0055];
+    const lightColors = [0x00ddff, 0xaa00ff, 0x00ff88, 0xff0066];
     const spread = 38;
     for (let i = 0; i < 4; i++) {
       const group = builders[i]();
       group.scale.setScalar(1.5);
+
+      // ── Ship light: small point light attached to the ship
+      const light = new THREE.PointLight(lightColors[i], 6, 20);
+      light.position.set(0, 0.5, 0);
+      group.add(light);
+
       const trail = makeTrail(trailColors[i]);
       const [startPos, endPos] = randomPath(spread);
-      const startProgress = i * 0.22;
+
+      // Orbit params (used when mode = 'orbit')
+      const orbitRadius = 18 + i * 6 + Math.random() * 8;
+      const orbitAngle  = Math.random() * Math.PI * 2;
+      const orbitHeight = 10 + Math.random() * 12;
+
       sceneRef.current.add(group);
       sceneRef.current.add(trail);
       shipsRef.current.push({
         group,
         trail,
         history: [] as THREE.Vector3[],
+        // path mode state
         startPos,
         endPos,
-        progress: startProgress,
-        speed: 0.038 + Math.random() * 0.025,
-        sineAmp: 1.5 + Math.random() * 2.0,
-        sineFreq: 0.5 + Math.random() * 0.5,
+        progress: i * 0.2,
+        speed: 0.11 + Math.random() * 0.07,   // ~3x faster
+        sineAmp: 2 + Math.random() * 2.5,
+        sineFreq: 0.5 + Math.random() * 0.6,
         spread,
+        // orbit mode state
+        orbitAngle,
+        orbitRadius,
+        orbitRadiusZ: orbitRadius * (0.3 + Math.random() * 0.5), // ellipse Z radius
+        orbitHeight,
+        orbitSpeed: 0.55 + Math.random() * 0.65,  // radians/second
+        orbitOscAmp: 2.5 + Math.random() * 2,
+        orbitOscFreq: 0.4 + Math.random() * 0.5,
+        // hybrid mode control
+        mode: i % 2 === 0 ? 'orbit' : 'path' as 'orbit' | 'path',
+        modeSwitchTimer: 4 + Math.random() * 6, // seconds until switch
+        modeTimer: 0,
       });
     }
   };
@@ -587,41 +612,68 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         if (m.uniforms?.uTime) m.uniforms.uTime.value = st;
       });
 
-      // ── Spaceships: path-based through-city movement ─────
+      // ── Spaceships: hybrid orbit + path-through-city flight ──
       shipsRef.current.forEach(ship => {
-        ship.progress += ship.speed * dt;
+        ship.modeTimer += dt;
 
-        // When ship exits, generate a fresh path
-        if (ship.progress >= 1.0) {
-          const [s, e] = randomPath(ship.spread);
-          ship.startPos = s;
-          ship.endPos   = e;
-          ship.progress = 0;
-          ship.history  = [];
+        let pos: THREE.Vector3;
+        let lookTarget: THREE.Vector3;
+
+        if (ship.mode === 'orbit') {
+          // ─ Elliptic orbit weaving between buildings ─
+          ship.orbitAngle += ship.orbitSpeed * dt;
+          const ox = Math.cos(ship.orbitAngle) * ship.orbitRadius;
+          const oz = Math.sin(ship.orbitAngle) * ship.orbitRadiusZ;
+          const oy = ship.orbitHeight + Math.sin(st * ship.orbitOscFreq) * ship.orbitOscAmp;
+          pos = new THREE.Vector3(ox, oy, oz);
+
+          const nextAngle = ship.orbitAngle + 0.1;
+          lookTarget = new THREE.Vector3(
+            Math.cos(nextAngle) * ship.orbitRadius,
+            oy,
+            Math.sin(nextAngle) * ship.orbitRadiusZ,
+          );
+
+          // Switch to path mode after modeSwitchTimer
+          if (ship.modeTimer >= ship.modeSwitchTimer) {
+            ship.mode = 'path';
+            ship.modeTimer = 0;
+            ship.modeSwitchTimer = 5 + Math.random() * 8;
+            const [s, e] = randomPath(ship.spread);
+            ship.startPos = s; ship.endPos = e; ship.progress = 0;
+          }
+        } else {
+          // ─ Path-based pass-through-city ─
+          ship.progress += ship.speed * dt;
+
+          if (ship.progress >= 1.0) {
+            // Done with path — switch to orbit mode
+            ship.mode = 'orbit';
+            ship.modeTimer = 0;
+            ship.modeSwitchTimer = 6 + Math.random() * 10;
+            ship.orbitAngle = Math.random() * Math.PI * 2;
+            ship.history = [];
+            ship.progress = 0;
+          }
+
+          const t = ship.progress;
+          pos = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, t);
+          const dir = new THREE.Vector3().subVectors(ship.endPos, ship.startPos).normalize();
+          const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+          const lateralOff = Math.sin(t * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
+          pos.addScaledVector(perp, lateralOff);
+          pos.y += Math.sin(t * Math.PI * 3) * 1.8;
+
+          const ahead = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, Math.min(t + 0.06, 1.0));
+          const aheadOff = lateralOff + Math.sin((t + 0.06) * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
+          ahead.addScaledVector(perp, aheadOff);
+          lookTarget = ahead;
         }
 
-        const t = ship.progress;
-        // Base linear interpolation
-        const pos = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, t);
-
-        // Sinusoidal lateral deviation (perpendicular to travel dir, XZ plane)
-        const dir = new THREE.Vector3().subVectors(ship.endPos, ship.startPos).normalize();
-        const perp = new THREE.Vector3(-dir.z, 0, dir.x);
-        const lateralOffset = Math.sin(t * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
-        pos.addScaledVector(perp, lateralOffset);
-
-        // Gentle vertical bob
-        pos.y += Math.sin(t * Math.PI * 3 + ship.progress * 2) * 1.5;
-
         ship.group.position.copy(pos);
+        if (!lookTarget.equals(pos)) ship.group.lookAt(lookTarget);
 
-        // Orient ship toward its next position
-        const ahead = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, Math.min(t + 0.05, 1.0));
-        const aheadPerp = lateralOffset + Math.sin((t + 0.05) * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
-        ahead.addScaledVector(perp, aheadPerp);
-        if (!ahead.equals(pos)) ship.group.lookAt(ahead);
-
-        // Trail: history ring of last TRAIL_LEN positions
+        // ─ Trail update ─
         ship.history.push(pos.clone());
         if (ship.history.length > TRAIL_LEN) ship.history.shift();
 
@@ -632,9 +684,9 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
           if (k < n) {
             const p = ship.history[k];
             posAttr.setXYZ(k, p.x, p.y, p.z);
-            alphaAttr.setX(k, (k / n) * 0.55); // tail fades to 0, head is 0.55
+            alphaAttr.setX(k, (k / n) * 0.65);
           } else {
-            posAttr.setXYZ(k, 0, -9999, 0);    // hide unused points below ground
+            posAttr.setXYZ(k, 0, -9999, 0);
             alphaAttr.setX(k, 0);
           }
         }
