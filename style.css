@@ -60,10 +60,8 @@ body {
   height: 100%;
   z-index: 10;
   pointer-events: none;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  padding: 2rem;
+  display: block;
+  padding: 1.5rem;
 }
 
 /* Shared Glass Panel Formats */
@@ -78,28 +76,33 @@ body {
 }
 
 .header {
-  padding: 1.5rem 2rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  align-items: center;
-  width: 100%;
-  max-width: 600px;
+  gap: 1rem;
+  align-items: flex-start;
+  width: fit-content;
+  max-width: 320px;
   animation: slideDown 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 20;
 }
 
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.25rem;
   font-weight: 700;
   background: linear-gradient(135deg, #4ade80, #3b82f6);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-align: center;
+  text-align: left;
 }
 
 .controls-row {
   display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   width: 100%;
 }
@@ -257,13 +260,16 @@ button:disabled {
 
 /* Stats Dashboard */
 .stats-card {
-  padding: 1.5rem;
+  padding: 1.25rem;
   min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  align-self: flex-start;
   animation: slideRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 20;
 }
 
 .stats-section {

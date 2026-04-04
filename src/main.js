@@ -151,15 +151,15 @@ function init() {
   window.addEventListener('mousemove', onMouseMove);
   if (form) form.addEventListener('submit', handleSearch);
   
-  if (themeSelect) {
-    themeSelect.addEventListener('change', (e) => {
-      if (isTransitioning) {
-        e.preventDefault();
-        return;
-      }
-      setTheme(e.target.value);
-    });
-  }
+  // if (themeSelect) {
+  //   themeSelect.addEventListener('change', (e) => {
+  //     if (isTransitioning) {
+  //       e.preventDefault();
+  //       return;
+  //     }
+  //     setTheme(e.target.value);
+  //   });
+  // }
 
   animate();
 }
@@ -249,7 +249,7 @@ function setupIsometric(t) {
   currentCamera.position.set(50, 50, 50);
   
   controls.object = currentCamera;
-  controls.enableRotate = false; // LOCK
+  controls.enableRotate = true; // Enabled as requested
   controls.enableZoom = true;
   renderPass.camera = currentCamera;
 
@@ -544,16 +544,8 @@ function checkIntersections() {
 }
 
 function showStatus(text, type = 'info') {
-  if (!statusMsg) return;
-  statusMsg.textContent = text;
-  
-  // Only reveal if there's text
-  if (text === '') {
-      statusMsg.classList.remove('visible');
-  } else {
-      statusMsg.className = 'glass-panel status visible';
-      statusMsg.style.borderColor = (type === 'error') ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255, 255, 255, 0.08)';
-  }
+  // Silent background logging if needed, UI element removed
+  console.log(`[Status] ${type.toUpperCase()}: ${text}`);
 }
 
 function updateStatsUI(data) {
