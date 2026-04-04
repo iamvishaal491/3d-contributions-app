@@ -6,7 +6,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import gsap from 'gsap';
 
-// Configuration constants
 const CUBE_SIZE = 1;
 const GAP = 0.2;
 const BASE_HEIGHT = 0.15;
@@ -17,384 +16,435 @@ const THEMES = {
     bg: 0x050505,
     fog: 100,
     fogFar: 400,
-    gridColor: 0x000000, 
     useBloom: false,
     colorLow: new THREE.Color('#9be9a8'),
     colorHigh: new THREE.Color('#216e39'),
     colorEmpty: 0xffffff,
-    lineColor: 0x000000,
   },
   skyline: {
-    bg: 0x010103,
+    bg: 0x010104,
     fog: 30,
-    fogFar: 200,
-    gridColor: 0x0a0a1a,
+    fogFar: 210,
+    gridColor: 0x0c0c1e,
     useBloom: true,
-    colorLow: new THREE.Color('#002244'),
-    colorHigh: new THREE.Color('#00ffff'),
     colorEmpty: 0x0a0a1a,
-    lineColor: 0x00ffff,
   }
 };
 
-const buildingShader = {
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vPosition;
-    void main() {
-      vUv = uv;
-      vPosition = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 uColor;
-    uniform float uRatio;
-    uniform float uTime;
-    varying vec2 vUv;
-    varying vec3 vPosition;
+// ─────────────────────────────────────────────────────────────
+//  SHARED VERTEX SHADER  (all 5 skins)
+// ─────────────────────────────────────────────────────────────
+const vertexShader = `
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  uniform float uHeight;
+  void main() {
+    vUv = uv;
+    vUv.y *= uHeight;  // tile vertically
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
-    void main() {
-      // Window grid logic
-      float horizonGrid = step(0.9, fract(vUv.x * 3.0));
-      float verticalGrid = step(0.8, fract(vUv.y * 15.0 * uRatio));
-      float window = horizonGrid + verticalGrid;
-      
-      // Top down glow
-      float topGlow = pow(vUv.y, 4.0) * 0.5;
-      
-      // Building base color - dark glassy look
-      vec3 baseColor = mix(vec3(0.01), uColor * 0.1, vUv.y);
-      
-      // Emissive windows - pulse effect
-      vec3 emissive = uColor * window * (0.6 + 0.4 * sin(uTime * 3.0 + vPosition.x));
-      
-      // Final color
-      vec3 finalColor = baseColor + emissive + (uColor * topGlow);
-      
-      gl_FragColor = vec4(finalColor, 1.0);
-    }
-  `
-};
+// ─────────────────────────────────────────────────────────────
+//  SKIN 1 – Classic Dense Grid  (purple/blue)
+// ─────────────────────────────────────────────────────────────
+const skin1Frag = `
+  uniform float uTime;
+  varying vec2 vUv;
+  void main() {
+    vec2 gv = fract(vUv * vec2(4.0, 6.0));
+    float col = step(0.12, gv.x) * step(0.12, gv.y)
+              * step(gv.x, 0.88) * step(gv.y, 0.88);
+    vec3 winColor = vec3(0.54, 0.17, 0.89);
+    vec3 base = vec3(0.04, 0.02, 0.06);
+    gl_FragColor = vec4(base + winColor * col * 1.4, 1.0);
+  }
+`;
+
+// ─────────────────────────────────────────────────────────────
+//  SKIN 2 – Sparse Random Grid  (slightly dimmed windows)
+// ─────────────────────────────────────────────────────────────
+const skin2Frag = `
+  uniform float uTime;
+  varying vec2 vUv;
+  float rand(vec2 co) {
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+  void main() {
+    vec2 cell = floor(vUv * vec2(4.0, 6.0));
+    vec2 gv  = fract(vUv * vec2(4.0, 6.0));
+    float on_off = step(0.45, rand(cell));
+    float window = step(0.15, gv.x) * step(0.15, gv.y)
+                 * step(gv.x, 0.85) * step(gv.y, 0.85);
+    float em = window * on_off;
+    vec3 winColor = vec3(0.4, 0.1, 0.85);
+    vec3 base = vec3(0.04, 0.02, 0.06);
+    gl_FragColor = vec4(base + winColor * em + winColor * window * 0.05, 1.0);
+  }
+`;
+
+// ─────────────────────────────────────────────────────────────
+//  SKIN 3 – Vertical Strip Grid  (cyan)
+// ─────────────────────────────────────────────────────────────
+const skin3Frag = `
+  uniform float uTime;
+  varying vec2 vUv;
+  void main() {
+    float strip = step(0.1, fract(vUv.x * 3.0)) * step(fract(vUv.x * 3.0), 0.4);
+    float line  = step(0.88, fract(vUv.y * 8.0));
+    float em    = strip * (1.0 - line) * 1.6;
+    vec3 winColor = vec3(0.0, 0.9, 1.0);
+    vec3 base = vec3(0.01, 0.02, 0.05);
+    gl_FragColor = vec4(base + winColor * em, 1.0);
+  }
+`;
+
+// ─────────────────────────────────────────────────────────────
+//  SKIN 4 – Edge Highlight Grid  (magenta)
+// ─────────────────────────────────────────────────────────────
+const skin4Frag = `
+  uniform float uTime;
+  varying vec2 vUv;
+  void main() {
+    vec2 uv = vUv;
+    // UV is per-face 0..1.  Edge bands
+    float edgeX = step(uv.x, 0.07) + step(0.93, uv.x);
+    float edgeY = step(uv.y, 0.03) + step(0.97, uv.y);
+    float edge  = clamp(edgeX + edgeY, 0.0, 1.0);
+    // Thin horizontal lines across edges
+    float lines = step(0.9, fract(uv.y * 12.0)) * edgeX;
+    float em    = edge * 1.8 + lines * 1.2;
+    vec3 winColor = vec3(1.0, 0.0, 1.0);
+    vec3 base = vec3(0.02, 0.01, 0.03);
+    gl_FragColor = vec4(base + winColor * em, 1.0);
+  }
+`;
+
+// ─────────────────────────────────────────────────────────────
+//  SKIN 5 – Pulse Grid  (teal, animated)
+// ─────────────────────────────────────────────────────────────
+const skin5Frag = `
+  uniform float uTime;
+  varying vec2 vUv;
+  void main() {
+    vec2 gv = fract(vUv * vec2(4.0, 6.0));
+    float col = step(0.12, gv.x) * step(0.12, gv.y)
+              * step(gv.x, 0.88) * step(gv.y, 0.88);
+    float pulse = 0.7 + 0.3 * sin(uTime * 2.5);
+    vec3 winColor = vec3(0.0, 1.0, 0.8);
+    vec3 base = vec3(0.02, 0.04, 0.04);
+    gl_FragColor = vec4(base + winColor * col * pulse * 1.5, 1.0);
+  }
+`;
+
+const SKIN_FRAGS = [skin1Frag, skin2Frag, skin3Frag, skin4Frag, skin5Frag];
+
+function makeSkinMaterial(skinIndex: number, towerHeight: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime:   { value: 0 },
+      uHeight: { value: Math.max(1, towerHeight) },
+    },
+    vertexShader,
+    fragmentShader: SKIN_FRAGS[skinIndex],
+  });
+}
+
+function selectSkin(ratio: number): number {
+  if (ratio < 0.25) return Math.random() < 0.5 ? 0 : 1; // dense or sparse
+  if (ratio < 0.55) return 2;                              // vertical strip
+  if (ratio < 0.80) return 3;                              // edge highlight
+  return 4;                                                // pulse (tallest)
+}
 
 export interface ThreeVisualizerRef {
   buildGrid: (data: any) => void;
   setTheme: (mode: string) => Promise<void>;
 }
-
-interface ThreeVisualizerProps {
-  theme: string;
-}
+interface ThreeVisualizerProps { theme: string; }
 
 export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerProps>(({ theme }, ref) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  
-  // Three.js State Refs
-  const sceneRef = useRef<THREE.Scene>(new THREE.Scene());
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const composerRef = useRef<EffectComposer | null>(null);
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const tooltipRef    = useRef<HTMLDivElement>(null);
+  const sceneRef      = useRef<THREE.Scene>(new THREE.Scene());
+  const rendererRef   = useRef<THREE.WebGLRenderer | null>(null);
   const renderPassRef = useRef<RenderPass | null>(null);
-  const bloomPassRef = useRef<UnrealBloomPass | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
-  const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const cubesRef = useRef<THREE.Mesh[]>([]);
-  const extraMeshesRef = useRef<THREE.Object3D[]>([]);
-  const shipsRef = useRef<any[]>([]);
+  const bloomPassRef  = useRef<UnrealBloomPass | null>(null);
+  const controlsRef   = useRef<OrbitControls | null>(null);
+  const cameraRef     = useRef<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
+  const perspCamRef   = useRef<THREE.PerspectiveCamera | null>(null);
+  const orthoCamRef   = useRef<THREE.OrthographicCamera | null>(null);
+  const cubesRef      = useRef<THREE.Mesh[]>([]);
+  const extraRef      = useRef<THREE.Object3D[]>([]);
+  const shipsRef      = useRef<any[]>([]);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
-  const clockRef = useRef(new THREE.Clock());
-  const currentThemeModeRef = useRef<string>(theme);
-  
-  // Interaction Refs
-  const mouseRef = useRef(new THREE.Vector2());
-  const raycasterRef = useRef(new THREE.Raycaster());
-  const hoveredCubeRef = useRef<THREE.Mesh | null>(null);
+  const clockRef      = useRef(new THREE.Clock());
+  const themeRef      = useRef<string>(theme);
+  const mouseRef      = useRef(new THREE.Vector2());
+  const raycasterRef  = useRef(new THREE.Raycaster());
+  const hoveredRef    = useRef<THREE.Mesh | null>(null);
 
+  // ── helpers ───────────────────────────────────────────────
   const clearGrid = () => {
-    cubesRef.current.forEach(cube => {
-      cube.geometry.dispose();
-      (cube.material as any).dispose?.();
-      sceneRef.current.remove(cube);
-    });
+    cubesRef.current.forEach(m => { m.geometry.dispose(); (m.material as any).dispose?.(); sceneRef.current.remove(m); });
     cubesRef.current = [];
-
-    extraMeshesRef.current.forEach(mesh => {
-      if ((mesh as any).geometry) (mesh as any).geometry.dispose();
-      if ((mesh as any).material) (mesh as any).material.dispose();
-      sceneRef.current.remove(mesh);
-    });
-    extraMeshesRef.current = [];
-    
-    shipsRef.current.forEach(ship => {
-      sceneRef.current.remove(ship.mesh);
-      sceneRef.current.remove(ship.trail);
-      ship.mesh.geometry.dispose();
-      ship.mesh.material.dispose();
-      ship.trail.geometry.dispose();
-      ship.trail.material.dispose();
+    extraRef.current.forEach(o => { (o as any).geometry?.dispose(); (o as any).material?.dispose(); sceneRef.current.remove(o); });
+    extraRef.current = [];
+    shipsRef.current.forEach(s => {
+      sceneRef.current.remove(s.group);
+      sceneRef.current.remove(s.trail);
+      s.trail.geometry.dispose();
+      s.trail.material.dispose();
     });
     shipsRef.current = [];
   };
 
   const createDrone = (color: number) => {
     const droneGroup = new THREE.Group();
-    const bodyGeom = new THREE.BoxGeometry(0.8, 0.2, 0.4);
-    const wingGeom = new THREE.BoxGeometry(0.2, 0.1, 1.2);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: 4 });
-    const body = new THREE.Mesh(bodyGeom, mat);
-    const wings = new THREE.Mesh(wingGeom, mat);
-    droneGroup.add(body);
-    droneGroup.add(wings);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x050505, emissive: color, emissiveIntensity: 5 });
+    const body  = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.45), bodyMat);
+    const wings = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 1.4),  bodyMat);
+    const nose  = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 6),   bodyMat);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 0.6;
+    droneGroup.add(body, wings, nose);
     return droneGroup;
   };
 
-  const createSpaceships = () => {
-    if (currentThemeModeRef.current !== 'skyline') return;
-    const colors = [0x00ffff, 0xff00ff, 0x00ff88];
+  const spawnShips = () => {
+    if (themeRef.current !== 'skyline') return;
+    const palette = [0x00ffff, 0xff00ff, 0x00ff88];
     for (let i = 0; i < 3; i++) {
-      const drone = createDrone(colors[i]);
-      const trailGeom = new THREE.BufferGeometry();
-      const trailMat = new THREE.LineBasicMaterial({ color: colors[i], transparent: true, opacity: 0.6 });
-      const positions = new Float32Array(30 * 3); // 30 history points
-      trailGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const trail = new THREE.Line(trailGeom, trailMat);
-      
-      const ship = {
-        mesh: drone,
-        trail,
+      const group = createDrone(palette[i]);
+      const trailGeo = new THREE.BufferGeometry();
+      const buf = new Float32Array(40 * 3);
+      trailGeo.setAttribute('position', new THREE.BufferAttribute(buf, 3));
+      const trailMat = new THREE.LineBasicMaterial({ color: palette[i], transparent: true, opacity: 0.55 });
+      const trail = new THREE.Line(trailGeo, trailMat);
+      sceneRef.current.add(group);
+      sceneRef.current.add(trail);
+      shipsRef.current.push({
+        group, trail,
         history: [] as THREE.Vector3[],
         angle: Math.random() * Math.PI * 2,
-        radius: 35 + Math.random() * 20,
-        speed: 0.2 + Math.random() * 0.3,
-        height: 15 + Math.random() * 10,
-        oscillationSpeed: 0.5 + Math.random(),
-        oscillationAmplitude: 2 + Math.random() * 3,
-      };
-      sceneRef.current.add(drone);
-      sceneRef.current.add(trail);
-      shipsRef.current.push(ship);
+        radius: 36 + i * 14,
+        speed: 0.25 + Math.random() * 0.22,
+        baseY: 14 + i * 5,
+        oscSpeed: 0.6 + Math.random() * 0.7,
+        oscAmp: 2.5 + Math.random() * 2,
+      });
     }
   };
 
-  const updateThemeSync = (mode: string) => {
+  const applyTheme = (mode: string) => {
     const t = THEMES[mode as keyof typeof THEMES] || THEMES.isometric;
+    themeRef.current = mode;
     const scene = sceneRef.current;
-    currentThemeModeRef.current = mode;
     scene.background = new THREE.Color(t.bg);
     scene.fog = new THREE.Fog(t.bg, t.fog, t.fogFar);
-    
-    if (gridHelperRef.current) {
-      scene.remove(gridHelperRef.current);
-      gridHelperRef.current = null;
-    }
+    if (gridHelperRef.current) { scene.remove(gridHelperRef.current); gridHelperRef.current = null; }
 
     if (mode === 'isometric') {
-      cameraRef.current = orthographicCameraRef.current;
-      orthographicCameraRef.current?.position.set(50, 50, 50);
+      cameraRef.current = orthoCamRef.current;
+      orthoCamRef.current?.position.set(50, 50, 50);
+      if (controlsRef.current) { controlsRef.current.maxPolarAngle = Math.PI; controlsRef.current.minPolarAngle = 0; }
     } else {
-      cameraRef.current = perspectiveCameraRef.current;
-      perspectiveCameraRef.current?.position.set(-80, 60, 150);
-      gridHelperRef.current = new THREE.GridHelper(500, 100, t.gridColor, t.gridColor);
+      cameraRef.current = perspCamRef.current;
+      perspCamRef.current?.position.set(-80, 60, 150);
+      const gColor = (t as any).gridColor ?? 0x111122;
+      gridHelperRef.current = new THREE.GridHelper(500, 100, gColor, gColor);
       scene.add(gridHelperRef.current);
-      createSpaceships();
+      if (controlsRef.current) { controlsRef.current.maxPolarAngle = Math.PI / 2 - 0.08; controlsRef.current.minPolarAngle = 0.1; }
     }
-
     if (cameraRef.current) {
       if (renderPassRef.current) renderPassRef.current.camera = cameraRef.current;
-      if (controlsRef.current) {
-        controlsRef.current.object = cameraRef.current;
-        controlsRef.current.target.set(0, 0, 0);
-        controlsRef.current.update();
-      }
+      if (controlsRef.current) { controlsRef.current.object = cameraRef.current; controlsRef.current.target.set(0,0,0); controlsRef.current.update(); }
     }
     if (bloomPassRef.current) bloomPassRef.current.enabled = t.useBloom;
   };
 
+  // ── public API ────────────────────────────────────────────
   useImperativeHandle(ref, () => ({
     buildGrid(data: any) {
-      if (!data || !data.weeks || !sceneRef.current) return;
+      if (!data?.weeks) return;
       clearGrid();
-      if (currentThemeModeRef.current === 'skyline') createSpaceships();
+      if (themeRef.current === 'skyline') spawnShips();
 
-      const currentTheme = THEMES[currentThemeModeRef.current as keyof typeof THEMES] || THEMES.isometric;
+      const iso = themeRef.current === 'isometric';
+      const currentTheme = THEMES[themeRef.current as keyof typeof THEMES] || THEMES.isometric;
       const weeks = data.weeks;
       const numWeeks = weeks.length;
       const numDays = 7;
-      
       let maxCount = 0;
-      weeks.forEach((week: any) => {
-        week.contributionDays?.forEach((day: any) => {
-          if (day.contributionCount > maxCount) maxCount = day.contributionCount;
-        });
-      });
+      weeks.forEach((w: any) => w.contributionDays?.forEach((d: any) => { if (d.contributionCount > maxCount) maxCount = d.contributionCount; }));
 
-      const getPositionX = (w: number) => (w - numWeeks / 2) * (CUBE_SIZE + GAP);
-      const getPositionZ = (d: number) => (d - numDays / 2) * (CUBE_SIZE + GAP);
-      const geometry = new THREE.BoxGeometry(CUBE_SIZE, 1, CUBE_SIZE);
-      geometry.translate(0, 0.5, 0);
+      const px = (w: number) => (w - numWeeks / 2) * (CUBE_SIZE + GAP);
+      const pz = (d: number) => (d - numDays / 2) * (CUBE_SIZE + GAP);
 
-      weeks.forEach((week: any, wIndex: number) => {
-        week.contributionDays?.forEach((day: any, dIndex: number) => {
-          let ratio = day.contributionCount > 0 ? (Math.log(day.contributionCount + 1) / Math.log(maxCount + 1)) : 0;
-          let rawHeight = day.contributionCount > 0 ? (BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 8) : BASE_HEIGHT;
-          const isSkyline = currentThemeModeRef.current === 'skyline';
+      const baseGeo = new THREE.BoxGeometry(CUBE_SIZE, 1, CUBE_SIZE);
+      baseGeo.translate(0, 0.5, 0);
+
+      // iso shared materials
+      const isoColorLow  = (currentTheme as any).colorLow  as THREE.Color | undefined;
+      const isoColorHigh = (currentTheme as any).colorHigh as THREE.Color | undefined;
+
+      weeks.forEach((week: any, wi: number) => {
+        week.contributionDays?.forEach((day: any, di: number) => {
+          const ratio = day.contributionCount > 0 ? Math.log(day.contributionCount + 1) / Math.log(maxCount + 1) : 0;
+          const rawH  = day.contributionCount > 0 ? BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 8 : BASE_HEIGHT;
           const isZero = day.contributionCount === 0;
-          const activeColor = currentTheme.colorLow.clone().lerp(currentTheme.colorHigh, ratio);
 
-          let material;
-          if (isSkyline && !isZero) {
-            material = new THREE.ShaderMaterial({
-              uniforms: {
-                uColor: { value: activeColor },
-                uRatio: { value: ratio },
-                uTime: { value: 0 }
-              },
-              vertexShader: buildingShader.vertexShader,
-              fragmentShader: buildingShader.fragmentShader,
-            });
+          let mat: THREE.Material;
+          if (iso) {
+            const col = isZero ? new THREE.Color((currentTheme as any).colorEmpty) : isoColorLow!.clone().lerp(isoColorHigh!, ratio);
+            mat = new THREE.MeshStandardMaterial({ color: col, emissive: isZero ? 0x000000 : col, emissiveIntensity: 0 });
+          } else if (isZero) {
+            mat = new THREE.MeshStandardMaterial({ color: (currentTheme as any).colorEmpty });
           } else {
-            material = new THREE.MeshStandardMaterial({
-              color: isZero ? currentTheme.colorEmpty : activeColor,
-              emissive: isZero ? 0x000000 : activeColor,
-              emissiveIntensity: 0,
-            });
+            // ── CYBERPUNK SKIN SYSTEM ──────────────────────
+            const skinIdx = selectSkin(ratio);
+            mat = makeSkinMaterial(skinIdx, rawH);
           }
 
-          const cube = new THREE.Mesh(geometry, material);
-          cube.scale.set(isSkyline ? 0.9 : 1.0, 0.01, isSkyline ? 0.9 : 1.0);
-          cube.position.set(getPositionX(wIndex), 0, getPositionZ(dIndex));
-          cube.userData = { date: day.date, count: day.contributionCount, targetHeight: rawHeight };
+          const cube = new THREE.Mesh(baseGeo, mat);
+          cube.scale.set(iso ? 1 : 0.88, 0.01, iso ? 1 : 0.88);
+          cube.position.set(px(wi), 0, pz(di));
+          cube.userData = { date: day.date, count: day.contributionCount, targetH: rawH };
           sceneRef.current.add(cube);
           cubesRef.current.push(cube);
 
-          if (isSkyline && ratio > 0.5) {
-            const antGeom = new THREE.CylinderGeometry(0.02, 0.02, 2);
-            const antMat = new THREE.MeshBasicMaterial({ color: activeColor });
-            const antenna = new THREE.Mesh(antGeom, antMat);
-            antenna.position.set(cube.position.x, rawHeight, cube.position.z);
-            sceneRef.current.add(antenna);
-            extraMeshesRef.current.push(antenna);
-          }
-
-          if (currentThemeModeRef.current === 'isometric') {
-            const edges = new THREE.EdgesGeometry(geometry);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 }));
+          // Isometric edge lines
+          if (iso) {
+            const edgeGeo = new THREE.EdgesGeometry(baseGeo);
+            const line = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 }));
             line.position.copy(cube.position);
             line.scale.copy(cube.scale);
             sceneRef.current.add(line);
-            extraMeshesRef.current.push(line);
+            extraRef.current.push(line);
+          }
+
+          // Skyline antennas on tall towers
+          if (!iso && ratio > 0.7) {
+            const antMat = new THREE.MeshBasicMaterial({ color: ratio > 0.9 ? 0xff00ff : 0x00ffff });
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.5), antMat);
+            ant.position.set(px(wi), rawH, pz(di));
+            sceneRef.current.add(ant);
+            extraRef.current.push(ant);
           }
         });
       });
 
       if (cameraRef.current) {
         controlsRef.current?.target.set(0, 0, 0);
-        if (currentThemeModeRef.current === 'isometric') {
+        if (iso) {
           const cam = cameraRef.current as THREE.OrthographicCamera;
-          cam.zoom = 0.1;
-          cam.updateProjectionMatrix();
-          gsap.to(cam, { zoom: 4.5, duration: 1.5, ease: "power3.out", onUpdate: () => cam.updateProjectionMatrix() });
+          cam.zoom = 0.1; cam.updateProjectionMatrix();
+          gsap.to(cam, { zoom: 4.5, duration: 1.5, ease: 'power3.out', onUpdate: () => cam.updateProjectionMatrix() });
         } else {
           const cam = cameraRef.current;
-          const targetPos = new THREE.Vector3(-80, 60, 150);
-          cam.position.set(targetPos.x, targetPos.y + 100, targetPos.z + 100);
-          gsap.to(cam.position, { x: targetPos.x, y: targetPos.y, z: targetPos.z, duration: 2, ease: "expo.out" });
+          const tp = new THREE.Vector3(-80, 60, 150);
+          cam.position.set(tp.x, tp.y + 100, tp.z + 100);
+          gsap.to(cam.position, { x: tp.x, y: tp.y, z: tp.z, duration: 2, ease: 'expo.out' });
         }
       }
     },
-    async setTheme(mode: string) {
-      updateThemeSync(mode);
-    }
+    async setTheme(mode: string) { applyTheme(mode); }
   }));
 
+  // ── scene init ────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
     const scene = sceneRef.current;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const aspect = window.innerWidth / window.innerHeight;
+    const perspCam  = new THREE.PerspectiveCamera(45, aspect, 0.1, 2000);
+    const orthoCam  = new THREE.OrthographicCamera(-35 * aspect, 35 * aspect, 35, -35, -100, 1000);
+    perspCamRef.current  = perspCam;
+    orthoCamRef.current  = orthoCam;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const perspectiveCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-    const orthographicCamera = new THREE.OrthographicCamera(-35 * (window.innerWidth / window.innerHeight), 35 * (window.innerWidth / window.innerHeight), 35, -35, -100, 1000);
-    perspectiveCameraRef.current = perspectiveCamera;
-    orthographicCameraRef.current = orthographicCamera;
-
-    const controls = new OrbitControls(orthographicCamera, renderer.domElement);
+    const controls = new OrbitControls(orthoCam, renderer.domElement);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
     controlsRef.current = controls;
 
     const composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, orthographicCamera);
-    composer.addPass(renderPass);
-    renderPassRef.current = renderPass;
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.4, 0.85);
-    composer.addPass(bloomPass);
-    bloomPassRef.current = bloomPass;
+    const rPass = new RenderPass(scene, orthoCam);
+    composer.addPass(rPass);
+    renderPassRef.current = rPass;
+    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.8, 0.5, 0.82);
+    composer.addPass(bloom);
+    bloomPassRef.current = bloom;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(20, 100, 30);
-    scene.add(dirLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(20, 100, 30);
+    scene.add(dir);
 
-    updateThemeSync(theme);
+    applyTheme(theme);
 
-    let animationId: number;
+    let id: number;
     const animate = () => {
-      animationId = requestAnimationFrame(animate);
+      id = requestAnimationFrame(animate);
       const dt = clockRef.current.getDelta();
       const st = clockRef.current.getElapsedTime();
-      if (controlsRef.current) controlsRef.current.update();
+      controls.update();
 
-      cubesRef.current.forEach((cube) => {
-        const target = cube.userData.targetHeight || BASE_HEIGHT;
-        if (cube.scale.y < target) cube.scale.y += (target - cube.scale.y) * 6 * dt;
-        if (cube.material instanceof THREE.ShaderMaterial) cube.material.uniforms.uTime.value = st;
+      // Animate cubes (grow) + shader time
+      cubesRef.current.forEach(cube => {
+        const th = cube.userData.targetH || BASE_HEIGHT;
+        if (Math.abs(cube.scale.y - th) > 0.01) cube.scale.y += (th - cube.scale.y) * 6 * dt;
+        const m = cube.material as THREE.ShaderMaterial;
+        if (m.uniforms?.uTime) m.uniforms.uTime.value = st;
       });
 
+      // Spaceships + trails
       shipsRef.current.forEach(ship => {
         ship.angle += ship.speed * dt;
         const x = Math.cos(ship.angle) * ship.radius;
         const z = Math.sin(ship.angle) * ship.radius;
-        const y = ship.height + Math.sin(st * ship.oscillationSpeed) * ship.oscillationAmplitude;
-        ship.mesh.position.set(x, y, z);
-        ship.mesh.lookAt(new THREE.Vector3(Math.cos(ship.angle + 0.1) * ship.radius, y, Math.sin(ship.angle + 0.1) * ship.radius));
-        
-        // Trail logic
-        ship.history.push(ship.mesh.position.clone());
-        if (ship.history.length > 30) ship.history.shift();
-        const posAttr = ship.trail.geometry.attributes.position;
-        for (let i = 0; i < ship.history.length; i++) {
-          posAttr.setXYZ(i, ship.history[i].x, ship.history[i].y, ship.history[i].z);
-        }
-        posAttr.needsUpdate = true;
+        const y = ship.baseY + Math.sin(st * ship.oscSpeed) * ship.oscAmp;
+        ship.group.position.set(x, y, z);
+        ship.group.lookAt(new THREE.Vector3(
+          Math.cos(ship.angle + 0.12) * ship.radius, y,
+          Math.sin(ship.angle + 0.12) * ship.radius
+        ));
+        ship.history.push(new THREE.Vector3(x, y, z));
+        if (ship.history.length > 40) ship.history.shift();
+        const pa = ship.trail.geometry.attributes.position;
+        ship.history.forEach((p: THREE.Vector3, i: number) => pa.setXYZ(i, p.x, p.y, p.z));
+        (pa as any).needsUpdate = true;
       });
 
-      const currentCam = cameraRef.current || orthographicCamera;
-      if (bloomPass.enabled) composer.render();
-      else renderer.render(scene, currentCam);
+      const cam = cameraRef.current || orthoCam;
+      if (bloom.enabled) composer.render();
+      else renderer.render(scene, cam);
     };
 
-    const handleResize = () => {
-      const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
-      perspectiveCamera.aspect = aspect;
-      perspectiveCamera.updateProjectionMatrix();
-      orthographicCamera.left = -35 * aspect;
-      orthographicCamera.right = 35 * aspect;
-      orthographicCamera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-      composer.setSize(w, h);
+    const onResize = () => {
+      const w = window.innerWidth, h = window.innerHeight, a = w / h;
+      perspCam.aspect = a; perspCam.updateProjectionMatrix();
+      orthoCam.left = -35 * a; orthoCam.right = 35 * a; orthoCam.updateProjectionMatrix();
+      renderer.setSize(w, h); composer.setSize(w, h);
     };
-    window.addEventListener('resize', handleResize);
+    const onMove = (e: MouseEvent) => {
+      mouseRef.current.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+      if (tooltipRef.current) { tooltipRef.current.style.left = `${e.clientX + 15}px`; tooltipRef.current.style.top = `${e.clientY + 15}px`; }
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('mousemove', onMove);
     animate();
     return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('mousemove', onMove);
+      cancelAnimationFrame(id);
       renderer.dispose();
-      if (containerRef.current && renderer.domElement.parentNode) containerRef.current.removeChild(renderer.domElement);
+      containerRef.current?.removeChild(renderer.domElement);
     };
   }, []);
 
