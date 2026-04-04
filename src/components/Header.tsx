@@ -21,29 +21,29 @@ export function Header({
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: 'easeOut' }}
-      className="w-full max-w-6xl mx-auto px-6 pt-12 pb-8 pointer-events-auto"
+      className="w-full max-w-4xl px-4 pt-4 pointer-events-auto"
     >
       <h1
-        className="text-5xl md:text-6xl font-bold text-white mb-12 tracking-tight"
+        className="text-3xl md:text-4xl font-bold text-white mb-6 tracking-tight"
         style={{ fontFamily: 'var(--font-heading)' }}
       >
         3D GitHub Contributions
       </h1>
 
-      <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+      <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="GitHub username"
-          className="flex-1 bg-black text-white border border-white/20 px-4 py-3 text-sm focus:outline-none focus:border-white transition-colors"
+          className="flex-1 bg-black/40 backdrop-blur-sm text-white border border-white/20 px-3 py-2 text-xs focus:outline-none focus:border-white transition-colors"
           style={{ fontFamily: 'var(--font-mono)' }}
         />
 
         <select
           value={theme}
           onChange={(e) => setTheme(e.target.value)}
-          className="bg-black text-white border border-white/20 px-4 py-3 text-sm focus:outline-none focus:border-white transition-colors cursor-pointer"
+          className="bg-black/40 backdrop-blur-sm text-white border border-white/20 px-3 py-2 text-xs focus:outline-none focus:border-white transition-colors cursor-pointer"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           <option value="isometric">Isometric</option>
@@ -53,7 +53,7 @@ export function Header({
 
         <button
           onClick={onVisualize}
-          className="bg-white text-black px-8 py-3 text-sm font-semibold hover:bg-white/90 transition-all active:scale-95"
+          className="bg-white text-black px-6 py-2 text-xs font-semibold hover:bg-white/90 transition-all active:scale-95"
           style={{ fontFamily: 'var(--font-heading)' }}
         >
           Visualize

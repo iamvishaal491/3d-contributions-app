@@ -26,32 +26,32 @@ export function StatsPanel({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.6, delay: 0.3 }}
-      className="bg-black/80 backdrop-blur-md border border-white/20 p-5 md:p-6 w-full lg:w-56 pointer-events-auto"
+      className="bg-black/80 backdrop-blur-md border border-white/20 p-4 md:p-5 w-full lg:w-52 pointer-events-auto shadow-2xl"
     >
       <h2
-        className="text-xl md:text-2xl font-bold text-white mb-6 tracking-tight"
+        className="text-xs font-bold text-white/50 mb-4 tracking-widest uppercase"
         style={{ fontFamily: 'var(--font-heading)' }}
       >
-        CONTRIBUTION STATS
+        STATS
       </h2>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {stats.map((stat, index) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.4 + index * 0.1 }}
-            className="flex justify-between items-baseline"
+            className="flex flex-col border-b border-white/5 pb-2 last:border-0"
           >
             <span
-              className="text-sm text-white/60 uppercase tracking-wider"
+              className="text-[10px] text-white/30 uppercase tracking-widest mb-1"
               style={{ fontFamily: 'var(--font-heading)' }}
             >
               {stat.label}
             </span>
             <span
-              className="text-2xl md:text-3xl font-bold text-white"
+              className="text-xl font-bold text-white"
               style={{ fontFamily: 'var(--font-mono)' }}
             >
               {stat.value}

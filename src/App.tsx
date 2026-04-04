@@ -59,7 +59,7 @@ function App() {
       <ThreeVisualizer ref={visualizerRef} theme={theme} />
 
       {/* UI Overlay Layer */}
-      <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-start p-6">
+      <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-start p-2 md:p-4">
         <Header
           username={username}
           setUsername={setUsername}
@@ -71,7 +71,7 @@ function App() {
 
       {/* Stats Dashboard - Fixed Right */}
       {visualizing && (
-        <div className="fixed right-6 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col gap-4">
+        <div className="fixed right-4 top-20 z-20 pointer-events-none flex flex-col gap-4">
           <StatsPanel
             total={stats.total}
             bestStreak={stats.bestStreak}

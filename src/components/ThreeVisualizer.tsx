@@ -14,14 +14,14 @@ const MAX_HEIGHT_SCALE = 3;
 
 const THEMES = {
   classic: {
-    bg: 0x0b0f19,
-    fog: 20,
-    fogFar: 100,
+    bg: 0x010409,
+    fog: 50,
+    fogFar: 300,
     gridColor: 0x1e293b,
-    useBloom: false,
-    colorLow: new THREE.Color('#102e1c'),
-    colorHigh: new THREE.Color('#4ade80'),
-    colorEmpty: 0x1e293b,
+    useBloom: true,
+    colorLow: new THREE.Color('#0e4429'),
+    colorHigh: new THREE.Color('#39d353'),
+    colorEmpty: 0x161b22,
   },
   isometric: {
     bg: 0x000000,
@@ -36,7 +36,7 @@ const THEMES = {
   skyline: {
     bg: 0x0a0310,
     fog: 20,
-    fogFar: 90,
+    fogFar: 150,
     gridColor: 0xff00ff,
     useBloom: true,
     colorLow: new THREE.Color('#002244'),
@@ -98,7 +98,6 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     scene.background = new THREE.Color(t.bg);
     scene.fog = new THREE.Fog(t.bg, t.fog, t.fogFar);
     
-    // Update Grid Helper
     if (gridHelperRef.current) {
       scene.remove(gridHelperRef.current);
       gridHelperRef.current.geometry.dispose();
@@ -109,26 +108,39 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     if (mode === 'isometric') {
       cameraRef.current = orthographicCameraRef.current;
       orthographicCameraRef.current?.position.set(50, 50, 50);
-      gridHelperRef.current = new THREE.GridHelper(100, 50, t.gridColor, t.gridColor);
+      gridHelperRef.current = new THREE.GridHelper(200, 40, t.gridColor, t.gridColor);
       scene.add(gridHelperRef.current);
+      if (controlsRef.current) {
+        controlsRef.current.maxPolarAngle = Math.PI;
+        controlsRef.current.minPolarAngle = 0;
+      }
     } else if (mode === 'skyline') {
       cameraRef.current = perspectiveCameraRef.current;
-      perspectiveCameraRef.current?.position.set(-60, 50, 120);
-      gridHelperRef.current = new THREE.GridHelper(150, 60, t.gridColor, t.gridColor);
+      perspectiveCameraRef.current?.position.set(-80, 60, 150);
+      gridHelperRef.current = new THREE.GridHelper(300, 60, t.gridColor, t.gridColor);
       scene.add(gridHelperRef.current);
+      if (controlsRef.current) {
+        controlsRef.current.maxPolarAngle = Math.PI / 2 - 0.1;
+        controlsRef.current.minPolarAngle = 0.1;
+      }
     } else {
       cameraRef.current = perspectiveCameraRef.current;
-      perspectiveCameraRef.current?.position.set(0, 100, 150);
+      perspectiveCameraRef.current?.position.set(0, 80, 180);
+      gridHelperRef.current = new THREE.GridHelper(200, 40, t.gridColor, t.gridColor);
+      scene.add(gridHelperRef.current);
+      if (controlsRef.current) {
+        controlsRef.current.maxPolarAngle = Math.PI / 2 - 0.05;
+        controlsRef.current.minPolarAngle = 0;
+      }
     }
 
     if (controlsRef.current && cameraRef.current) {
       controlsRef.current.object = cameraRef.current;
+      controlsRef.current.target.set(0, 0, 0);
       controlsRef.current.update();
     }
     
-    if (bloomPassRef.current) {
-      bloomPassRef.current.enabled = t.useBloom;
-    }
+    if (bloomPassRef.current) bloomPassRef.current.enabled = t.useBloom;
   };
 
   useImperativeHandle(ref, () => ({
@@ -156,7 +168,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       weeks.forEach((week: any, wIndex: number) => {
         week.contributionDays?.forEach((day: any, dIndex: number) => {
           let ratio = day.contributionCount > 0 ? (Math.log(day.contributionCount + 1) / Math.log(maxCount + 1)) : 0;
-          let rawHeight = day.contributionCount > 0 ? (BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 4) : BASE_HEIGHT;
+          let rawHeight = day.contributionCount > 0 ? (BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 5) : BASE_HEIGHT;
 
           const isNeon = currentThemeModeRef.current === 'skyline';
           const activeColor = currentTheme.colorLow.clone().lerp(currentTheme.colorHigh, ratio);
@@ -165,7 +177,9 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
           const material = new THREE.MeshStandardMaterial({
             color: isZero ? currentTheme.colorEmpty : (isNeon ? 0x000000 : activeColor),
             emissive: isZero ? 0x000000 : (isNeon ? activeColor : 0x000000),
-            emissiveIntensity: isNeon && !isZero ? (0.8 + ratio * 1.5) : 0,
+            emissiveIntensity: isNeon && !isZero ? (0.8 + ratio * 2) : 0,
+            roughness: isNeon ? 0.1 : 0.3,
+            metalness: isNeon ? 0.8 : 0.1,
           });
 
           const cube = new THREE.Mesh(geometry, material);
@@ -177,14 +191,18 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         });
       });
 
-      // Camera intro animation
       if (cameraRef.current) {
         controlsRef.current?.target.set(0, 0, 0);
         if (currentThemeModeRef.current === 'isometric') {
           const cam = cameraRef.current as THREE.OrthographicCamera;
-          cam.zoom = 1;
+          cam.zoom = 0.1;
           cam.updateProjectionMatrix();
           gsap.to(cam, { zoom: 4.5, duration: 1.5, ease: "power3.out", onUpdate: () => cam.updateProjectionMatrix() });
+        } else {
+          const cam = cameraRef.current;
+          const targetPos = currentThemeModeRef.current === 'skyline' ? new THREE.Vector3(-80, 60, 150) : new THREE.Vector3(0, 80, 180);
+          cam.position.set(targetPos.x, targetPos.y + 100, targetPos.z + 100);
+          gsap.to(cam.position, { x: targetPos.x, y: targetPos.y, z: targetPos.z, duration: 2, ease: "expo.out" });
         }
       }
     },
@@ -193,21 +211,19 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     }
   }));
 
-  // Initial Setup useEffect - Runs ONLY ONCE
   useEffect(() => {
     if (!containerRef.current) return;
 
     const scene = sceneRef.current;
     const aspect = window.innerWidth / window.innerHeight;
-    const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
-    const orthographicCamera = new THREE.OrthographicCamera(-20 * aspect, 20 * aspect, 20, -20, -100, 1000);
+    const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 2000);
+    const orthographicCamera = new THREE.OrthographicCamera(-30 * aspect, 30 * aspect, 30, -30, -100, 1000);
     perspectiveCameraRef.current = perspectiveCamera;
     orthographicCameraRef.current = orthographicCamera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -223,13 +239,12 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     composer.addPass(bloomPass);
     bloomPassRef.current = bloomPass;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(50, 100, 50);
     scene.add(dirLight);
 
-    // Initial theme update without state dependency crash
     updateThemeSync(theme);
 
     let animationId: number;
@@ -237,39 +252,40 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       animationId = requestAnimationFrame(animate);
       const dt = clockRef.current.getDelta();
       if (controlsRef.current) controlsRef.current.update();
-      if (composerRef.current) composerRef.current.render();
 
       cubesRef.current.forEach(cube => {
         const target = cube.userData.targetHeight || BASE_HEIGHT;
-        if (cube.scale.y < target) cube.scale.y += (target - cube.scale.y) * 8 * dt;
+        if (Math.abs(cube.scale.y - target) > 0.01) {
+          cube.scale.y += (target - cube.scale.y) * 6 * dt;
+        }
       });
 
-      if (cameraRef.current) {
-        raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-        const intersects = raycasterRef.current.intersectObjects(cubesRef.current);
-        if (intersects.length > 0) {
-          const object = intersects[0].object as THREE.Mesh;
-          if (hoveredCubeRef.current !== object) {
-            if (hoveredCubeRef.current) (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
-            hoveredCubeRef.current = object;
-            (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
-            if (tooltipRef.current) {
-              const { date, count } = object.userData;
-              tooltipRef.current.innerHTML = `<div class="text-[10px] text-white/60 mb-1">${new Date(date).toLocaleDateString()}</div><div class="text-sm font-bold text-white">${count} contributions</div>`;
-              tooltipRef.current.style.opacity = '1';
-            }
+      const currentCam = cameraRef.current || orthographicCamera;
+      raycasterRef.current.setFromCamera(mouseRef.current, currentCam);
+      const intersects = raycasterRef.current.intersectObjects(cubesRef.current);
+      
+      if (intersects.length > 0) {
+        const object = intersects[0].object as THREE.Mesh;
+        if (hoveredCubeRef.current !== object) {
+          if (hoveredCubeRef.current) (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
+          hoveredCubeRef.current = object;
+          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
+          if (tooltipRef.current) {
+            const { date, count } = object.userData;
+            tooltipRef.current.innerHTML = `<div class="text-[10px] text-white/40 mb-1">${new Date(date).toLocaleDateString()}</div><div class="text-sm font-bold text-white">${count} days</div>`;
+            tooltipRef.current.style.opacity = '1';
           }
-        } else {
-          if (hoveredCubeRef.current) {
-            (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
-            hoveredCubeRef.current = null;
-            if (tooltipRef.current) tooltipRef.current.style.opacity = '0';
-          }
+        }
+      } else {
+        if (hoveredCubeRef.current) {
+          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
+          hoveredCubeRef.current = null;
+          if (tooltipRef.current) tooltipRef.current.style.opacity = '0';
         }
       }
 
       if (bloomPass.enabled) composer.render();
-      else renderer.render(scene, cameraRef.current || orthographicCamera);
+      else renderer.render(scene, currentCam);
     };
 
     const handleResize = () => {
@@ -304,12 +320,12 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       renderer.dispose();
       if (containerRef.current && renderer.domElement.parentNode) containerRef.current.removeChild(renderer.domElement);
     };
-  }, []); // Empty dependency array ensures stability
+  }, []);
 
   return (
     <>
       <div id="canvas-container" ref={containerRef} style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'auto' }} />
-      <div ref={tooltipRef} className="fixed pointer-events-none bg-black border border-white/20 p-3 z-[100] opacity-0 transition-opacity duration-200 min-w-[120px]" style={{ fontFamily: 'var(--font-mono)' }} />
+      <div ref={tooltipRef} className="fixed pointer-events-none bg-black/80 backdrop-blur-md border border-white/20 p-3 z-[100] opacity-0 transition-opacity duration-200 min-w-[120px] rounded-lg shadow-2xl" style={{ fontFamily: 'var(--font-mono)' }} />
     </>
   );
 });
