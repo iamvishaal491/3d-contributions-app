@@ -44,130 +44,138 @@ const vertexShader = `
   }
 `;
 
-// Shared rand helper injected into all fragment shaders
+// Shared rand helper
 const randFn = `
   float rand(vec2 co) {
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
   }
 `;
 
+// Shared palette helper: picks 2 colors from {pink, violet, cyan} per building.
+// uSeed is a unique float per building. Returns colorA or colorB based on cellRand.
+const paletteFn = `
+  vec3 getWinColor(float cellRand, float seed) {
+    vec3 neonPink   = vec3(1.0,  0.04, 0.56);
+    vec3 neonViolet = vec3(0.65, 0.0,  1.0);
+    vec3 neonCyan   = vec3(0.0,  0.9,  1.0);
+    // Pick the pair for this building
+    float pairIdx = floor(rand(vec2(seed, seed * 0.73 + 1.3)) * 3.0);
+    vec3 colorA = pairIdx < 1.0 ? neonPink
+                : pairIdx < 2.0 ? neonPink
+                : neonCyan;
+    vec3 colorB = pairIdx < 1.0 ? neonCyan
+                : pairIdx < 2.0 ? neonViolet
+                : neonViolet;
+    // Per-cell: ~30% dark, rest split 50/50 between A and B
+    if (cellRand < 0.30) return vec3(0.0);     // lights off
+    return cellRand < 0.65 ? colorA : colorB;
+  }
+`;
+
 // ─────────────────────────────────────────────────────────────
-//  SKIN A – Dense Grid, Multi-Color (pink/blue/warm-white)
-//  Each window cell is independently colored.
-//  Soft inner glow makes light feel like it's coming from inside.
+//  SKIN A – Dense Grid (neon pair, 30% dark cells)
 // ─────────────────────────────────────────────────────────────
 const skinAFrag = `
   uniform float uTime;
+  uniform float uSeed;
   varying vec2 vUv;
   ${randFn}
+  ${paletteFn}
   void main() {
     vec2 cell = floor(vUv * vec2(4.0, 6.0));
     vec2 gv   = fract(vUv * vec2(4.0, 6.0));
 
-    // Window shape — slightly thicker frame so fewer lit pixels
-    float window = step(0.18, gv.x) * step(0.18, gv.y)
-                 * step(gv.x, 0.82) * step(gv.y, 0.82);
+    float window = step(0.15, gv.x) * step(0.15, gv.y)
+                 * step(gv.x, 0.85) * step(gv.y, 0.85);
 
-    // Soft inner glow
     vec2 centered = 1.0 - abs(gv * 2.0 - 1.0);
     float innerGlow = centered.x * centered.y * window;
 
-    // Per-cell random color: pink / blue / warm white
-    // Reduce warm-white share to avoid blowout (only 15%)
-    float r = rand(cell);
-    vec3 neonPink  = vec3(1.0,  0.04, 0.56);
-    vec3 neonBlue  = vec3(0.04, 0.4,  1.0);
-    vec3 warmWhite = vec3(1.0,  0.92, 0.45);
-    vec3 winColor = r < 0.42 ? neonPink
-                  : r < 0.85 ? neonBlue
-                  : warmWhite;
+    float cellRand = rand(cell + vec2(uSeed));
+    vec3 winColor  = getWinColor(cellRand, uSeed);
 
-    vec3 base = vec3(0.015, 0.008, 0.02);
+    vec3 base = vec3(0.01, 0.005, 0.015);
     vec3 col  = base
-              + winColor * window    * 0.55   // dimmer flat emission
-              + winColor * innerGlow * 0.28;  // subtle inner glow only
+              + winColor * window    * 0.75
+              + winColor * innerGlow * 0.4;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 // ─────────────────────────────────────────────────────────────
-//  SKIN B – Sparse Grid, Neon Pink / Neon Violet
-//  ~55% of windows randomly on. Each lit window picks pink or violet.
+//  SKIN B – Sparse Grid (~45% lit, neon pair, dark cells)
 // ─────────────────────────────────────────────────────────────
 const skinBFrag = `
   uniform float uTime;
+  uniform float uSeed;
   varying vec2 vUv;
   ${randFn}
+  ${paletteFn}
   void main() {
     vec2 cell = floor(vUv * vec2(4.0, 6.0));
     vec2 gv   = fract(vUv * vec2(4.0, 6.0));
 
-    // ~40% of windows on (was 56%)
-    float on_off = step(0.60, rand(cell));
-    float window = step(0.18, gv.x) * step(0.18, gv.y)
-                 * step(gv.x, 0.82) * step(gv.y, 0.82);
+    // Extra sparseness: only ~55% of cells are candidates
+    float sparse = step(0.45, rand(cell * 1.3 + vec2(uSeed * 0.5)));
+    float window = step(0.15, gv.x) * step(0.15, gv.y)
+                 * step(gv.x, 0.85) * step(gv.y, 0.85);
+    window *= sparse;
 
     vec2 centered = 1.0 - abs(gv * 2.0 - 1.0);
-    float innerGlow = centered.x * centered.y * window * on_off;
+    float innerGlow = centered.x * centered.y * window;
 
-    float r2 = rand(cell + vec2(5.1, 2.9));
-    vec3 neonPink   = vec3(1.0,  0.04, 0.56);
-    vec3 neonViolet = vec3(0.65, 0.0,  1.0);
-    vec3 winColor = r2 < 0.5 ? neonPink : neonViolet;
+    float cellRand = rand(cell + vec2(uSeed + 2.7));
+    vec3 winColor  = getWinColor(cellRand, uSeed);
 
-    vec3 base = vec3(0.015, 0.008, 0.02);
+    vec3 base = vec3(0.01, 0.005, 0.015);
     vec3 col  = base
-              + winColor * window * on_off * 0.58
-              + winColor * innerGlow       * 0.22;
+              + winColor * window    * 0.75
+              + winColor * innerGlow * 0.38;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 // ─────────────────────────────────────────────────────────────
-//  SKIN C – Pulsing Dense Grid (animated version of A)
-//  Same multi-color windows but intensity breathes with sin(time).
+//  SKIN C – Pulsing Dense Grid (per-cell independent phase)
 // ─────────────────────────────────────────────────────────────
 const skinCFrag = `
   uniform float uTime;
+  uniform float uSeed;
   varying vec2 vUv;
   ${randFn}
+  ${paletteFn}
   void main() {
     vec2 cell = floor(vUv * vec2(4.0, 6.0));
     vec2 gv   = fract(vUv * vec2(4.0, 6.0));
 
-    float window = step(0.18, gv.x) * step(0.18, gv.y)
-                 * step(gv.x, 0.82) * step(gv.y, 0.82);
+    float window = step(0.15, gv.x) * step(0.15, gv.y)
+                 * step(gv.x, 0.85) * step(gv.y, 0.85);
 
     vec2 centered = 1.0 - abs(gv * 2.0 - 1.0);
     float innerGlow = centered.x * centered.y * window;
 
-    float r = rand(cell);
-    vec3 neonPink  = vec3(1.0,  0.04, 0.56);
-    vec3 neonBlue  = vec3(0.04, 0.4,  1.0);
-    vec3 warmWhite = vec3(1.0,  0.92, 0.45);
-    vec3 winColor = r < 0.42 ? neonPink
-                  : r < 0.85 ? neonBlue
-                  : warmWhite;
+    float cellRand = rand(cell + vec2(uSeed + 5.1));
+    vec3 winColor  = getWinColor(cellRand, uSeed);
 
-    // Gentle pulse — narrow range so it doesn't spike bright
-    float phase = rand(cell + vec2(1.1, 3.7)) * 6.28318;
-    float pulse = 0.75 + 0.25 * sin(uTime * 1.8 + phase);
+    float phase = rand(cell + vec2(uSeed + 1.1)) * 6.28318;
+    float pulse = 0.72 + 0.28 * sin(uTime * 1.8 + phase);
 
-    vec3 base = vec3(0.015, 0.008, 0.02);
+    vec3 base = vec3(0.01, 0.005, 0.015);
     vec3 col  = base
-              + winColor * window    * pulse * 0.55
-              + winColor * innerGlow * pulse * 0.22;
+              + winColor * window    * pulse * 0.78
+              + winColor * innerGlow * pulse * 0.38;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 const SKIN_FRAGS = [skinAFrag, skinBFrag, skinCFrag];
 
-function makeSkinMaterial(skinIndex: number, towerHeight: number): THREE.ShaderMaterial {
+function makeSkinMaterial(skinIndex: number, towerHeight: number, seed: number): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       uTime:   { value: 0 },
       uHeight: { value: Math.max(1, towerHeight) },
+      uSeed:   { value: seed },
     },
     vertexShader,
     fragmentShader: SKIN_FRAGS[skinIndex],
@@ -175,9 +183,6 @@ function makeSkinMaterial(skinIndex: number, towerHeight: number): THREE.ShaderM
 }
 
 // Height-based selection:
-// Short  → sparse pink/violet (B)  or dense multi-color (A)
-// Medium → dense multi-color (A)
-// Tall   → pulsing dense (C)
 function selectSkin(ratio: number): number {
   if (ratio < 0.35) return Math.random() < 0.55 ? 1 : 0;  // B or A
   if (ratio < 0.72) return 0;                               // A
@@ -325,12 +330,12 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
           if (iso) {
             const col = isZero ? new THREE.Color((currentTheme as any).colorEmpty) : isoColorLow!.clone().lerp(isoColorHigh!, ratio);
             mat = new THREE.MeshStandardMaterial({ color: col, emissive: isZero ? 0x000000 : col, emissiveIntensity: 0 });
-          } else if (isZero) {
-            mat = new THREE.MeshStandardMaterial({ color: (currentTheme as any).colorEmpty });
-          } else {
-            // ── CYBERPUNK SKIN SYSTEM ──────────────────────
+          } else if (!iso && !isZero) {
             const skinIdx = selectSkin(ratio);
-            mat = makeSkinMaterial(skinIdx, rawH);
+            const seed = wi * 7.3 + di * 13.17;
+            mat = makeSkinMaterial(skinIdx, rawH, seed);
+          } else {
+            mat = new THREE.MeshStandardMaterial({ color: (currentTheme as any).colorEmpty });
           }
 
           const cube = new THREE.Mesh(baseGeo, mat);
@@ -403,7 +408,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     const rPass = new RenderPass(scene, orthoCam);
     composer.addPass(rPass);
     renderPassRef.current = rPass;
-    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.85, 0.25, 0.9);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.35, 0.88);
     composer.addPass(bloom);
     bloomPassRef.current = bloom;
 
