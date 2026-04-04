@@ -25,16 +25,56 @@ const THEMES = {
     lineColor: 0x000000,
   },
   skyline: {
-    bg: 0x020205,
-    fog: 20,
-    fogFar: 180,
-    gridColor: 0x111122,
+    bg: 0x010103,
+    fog: 30,
+    fogFar: 200,
+    gridColor: 0x0a0a1a,
     useBloom: true,
-    colorLow: new THREE.Color('#001133'),
+    colorLow: new THREE.Color('#002244'),
     colorHigh: new THREE.Color('#00ffff'),
-    colorEmpty: 0x111122,
+    colorEmpty: 0x0a0a1a,
     lineColor: 0x00ffff,
   }
+};
+
+const buildingShader = {
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform float uRatio;
+    uniform float uTime;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+
+    void main() {
+      // Window grid logic
+      float horizonGrid = step(0.9, fract(vUv.x * 3.0));
+      float verticalGrid = step(0.8, fract(vUv.y * 15.0 * uRatio));
+      float window = horizonGrid + verticalGrid;
+      
+      // Top down glow
+      float topGlow = pow(vUv.y, 4.0) * 0.5;
+      
+      // Building base color - dark glassy look
+      vec3 baseColor = mix(vec3(0.01), uColor * 0.1, vUv.y);
+      
+      // Emissive windows - pulse effect
+      vec3 emissive = uColor * window * (0.6 + 0.4 * sin(uTime * 3.0 + vPosition.x));
+      
+      // Final color
+      vec3 finalColor = baseColor + emissive + (uColor * topGlow);
+      
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
 };
 
 export interface ThreeVisualizerRef {
@@ -61,7 +101,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const cubesRef = useRef<THREE.Mesh[]>([]);
-  const linesRef = useRef<THREE.LineSegments[]>([]);
+  const extraMeshesRef = useRef<THREE.Object3D[]>([]);
   const shipsRef = useRef<any[]>([]);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
   const clockRef = useRef(new THREE.Clock());
@@ -75,56 +115,65 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const clearGrid = () => {
     cubesRef.current.forEach(cube => {
       cube.geometry.dispose();
-      if (Array.isArray(cube.material)) {
-        cube.material.forEach(m => m.dispose());
-      } else {
-        cube.material.dispose();
-      }
+      (cube.material as any).dispose?.();
       sceneRef.current.remove(cube);
     });
     cubesRef.current = [];
 
-    linesRef.current.forEach(line => {
-      line.geometry.dispose();
-      (line.material as THREE.Material).dispose();
-      sceneRef.current.remove(line);
+    extraMeshesRef.current.forEach(mesh => {
+      if ((mesh as any).geometry) (mesh as any).geometry.dispose();
+      if ((mesh as any).material) (mesh as any).material.dispose();
+      sceneRef.current.remove(mesh);
     });
-    linesRef.current = [];
+    extraMeshesRef.current = [];
     
-    // Clear ships
     shipsRef.current.forEach(ship => {
+      sceneRef.current.remove(ship.mesh);
+      sceneRef.current.remove(ship.trail);
       ship.mesh.geometry.dispose();
       ship.mesh.material.dispose();
-      sceneRef.current.remove(ship.mesh);
+      ship.trail.geometry.dispose();
+      ship.trail.material.dispose();
     });
     shipsRef.current = [];
   };
 
+  const createDrone = (color: number) => {
+    const droneGroup = new THREE.Group();
+    const bodyGeom = new THREE.BoxGeometry(0.8, 0.2, 0.4);
+    const wingGeom = new THREE.BoxGeometry(0.2, 0.1, 1.2);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: 4 });
+    const body = new THREE.Mesh(bodyGeom, mat);
+    const wings = new THREE.Mesh(wingGeom, mat);
+    droneGroup.add(body);
+    droneGroup.add(wings);
+    return droneGroup;
+  };
+
   const createSpaceships = () => {
     if (currentThemeModeRef.current !== 'skyline') return;
-    
-    const shipGeom = new THREE.ConeGeometry(0.4, 1.2, 3);
-    shipGeom.rotateX(Math.PI / 2);
-    
     const colors = [0x00ffff, 0xff00ff, 0x00ff88];
-    
     for (let i = 0; i < 3; i++) {
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: colors[i],
-        emissiveIntensity: 2,
-      });
-      const mesh = new THREE.Mesh(shipGeom, mat);
+      const drone = createDrone(colors[i]);
+      const trailGeom = new THREE.BufferGeometry();
+      const trailMat = new THREE.LineBasicMaterial({ color: colors[i], transparent: true, opacity: 0.6 });
+      const positions = new Float32Array(30 * 3); // 30 history points
+      trailGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const trail = new THREE.Line(trailGeom, trailMat);
+      
       const ship = {
-        mesh,
+        mesh: drone,
+        trail,
+        history: [] as THREE.Vector3[],
         angle: Math.random() * Math.PI * 2,
         radius: 35 + Math.random() * 20,
         speed: 0.2 + Math.random() * 0.3,
-        height: 15 + Math.random() * 15,
+        height: 15 + Math.random() * 10,
         oscillationSpeed: 0.5 + Math.random(),
         oscillationAmplitude: 2 + Math.random() * 3,
       };
-      sceneRef.current.add(mesh);
+      sceneRef.current.add(drone);
+      sceneRef.current.add(trail);
       shipsRef.current.push(ship);
     }
   };
@@ -132,34 +181,23 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const updateThemeSync = (mode: string) => {
     const t = THEMES[mode as keyof typeof THEMES] || THEMES.isometric;
     const scene = sceneRef.current;
-    
     currentThemeModeRef.current = mode;
     scene.background = new THREE.Color(t.bg);
     scene.fog = new THREE.Fog(t.bg, t.fog, t.fogFar);
     
     if (gridHelperRef.current) {
       scene.remove(gridHelperRef.current);
-      gridHelperRef.current.geometry.dispose();
-      (gridHelperRef.current.material as THREE.Material).dispose();
       gridHelperRef.current = null;
     }
 
     if (mode === 'isometric') {
       cameraRef.current = orthographicCameraRef.current;
       orthographicCameraRef.current?.position.set(50, 50, 50);
-      if (controlsRef.current) {
-        controlsRef.current.maxPolarAngle = Math.PI;
-        controlsRef.current.minPolarAngle = 0;
-      }
     } else {
       cameraRef.current = perspectiveCameraRef.current;
       perspectiveCameraRef.current?.position.set(-80, 60, 150);
       gridHelperRef.current = new THREE.GridHelper(500, 100, t.gridColor, t.gridColor);
       scene.add(gridHelperRef.current);
-      if (controlsRef.current) {
-        controlsRef.current.maxPolarAngle = Math.PI / 2 - 0.1;
-        controlsRef.current.minPolarAngle = 0.1;
-      }
       createSpaceships();
     }
 
@@ -171,7 +209,6 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         controlsRef.current.update();
       }
     }
-    
     if (bloomPassRef.current) bloomPassRef.current.enabled = t.useBloom;
   };
 
@@ -201,60 +238,53 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       weeks.forEach((week: any, wIndex: number) => {
         week.contributionDays?.forEach((day: any, dIndex: number) => {
           let ratio = day.contributionCount > 0 ? (Math.log(day.contributionCount + 1) / Math.log(maxCount + 1)) : 0;
-          let rawHeight = day.contributionCount > 0 ? (BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 7) : BASE_HEIGHT;
-
+          let rawHeight = day.contributionCount > 0 ? (BASE_HEIGHT + ratio * MAX_HEIGHT_SCALE * 8) : BASE_HEIGHT;
           const isSkyline = currentThemeModeRef.current === 'skyline';
-          const activeColor = currentTheme.colorLow.clone().lerp(currentTheme.colorHigh, ratio);
           const isZero = day.contributionCount === 0;
+          const activeColor = currentTheme.colorLow.clone().lerp(currentTheme.colorHigh, ratio);
 
-          const material = new THREE.MeshStandardMaterial({
-            color: isZero ? currentTheme.colorEmpty : (isSkyline ? 0x010103 : activeColor),
-            emissive: isZero ? 0x000000 : activeColor,
-            emissiveIntensity: isSkyline && !isZero ? (0.5 + ratio * 3) : 0,
-            roughness: isSkyline ? 0.05 : 0.2,
-            metalness: isSkyline ? 0.9 : 0.1,
-          });
-
-          // Procedural Window Shader for Skyline
+          let material;
           if (isSkyline && !isZero) {
-            material.onBeforeCompile = (shader) => {
-              shader.uniforms.uRatio = { value: ratio };
-              shader.uniforms.uTime = { value: 0 };
-              shader.fragmentShader = `
-                uniform float uRatio;
-                uniform float uTime;
-                ${shader.fragmentShader}
-              `.replace(
-                `#include <emissive_fragment>`,
-                `
-                #include <emissive_fragment>
-                float windowIntensity = step(0.85, fract(vUv.x * 4.0)) + step(0.8, fract(vUv.y * 12.0 * uRatio));
-                windowIntensity = clamp(windowIntensity, 0.0, 1.0);
-                totalEmissiveRadiance += emissive * windowIntensity * (0.8 + 0.2 * sin(uTime * 2.0));
-                `
-              );
-              material.userData.shader = shader;
-            };
+            material = new THREE.ShaderMaterial({
+              uniforms: {
+                uColor: { value: activeColor },
+                uRatio: { value: ratio },
+                uTime: { value: 0 }
+              },
+              vertexShader: buildingShader.vertexShader,
+              fragmentShader: buildingShader.fragmentShader,
+            });
+          } else {
+            material = new THREE.MeshStandardMaterial({
+              color: isZero ? currentTheme.colorEmpty : activeColor,
+              emissive: isZero ? 0x000000 : activeColor,
+              emissiveIntensity: 0,
+            });
           }
 
-          const widthVar = isSkyline ? (0.85 + Math.random() * 0.3) : 1.0;
-          const depthVar = isSkyline ? (0.85 + Math.random() * 0.3) : 1.0;
-          
           const cube = new THREE.Mesh(geometry, material);
-          cube.scale.set(widthVar, 0.01, depthVar);
+          cube.scale.set(isSkyline ? 0.9 : 1.0, 0.01, isSkyline ? 0.9 : 1.0);
           cube.position.set(getPositionX(wIndex), 0, getPositionZ(dIndex));
-          cube.userData = { date: day.date, count: day.contributionCount, originalEmissive: material.emissive.clone(), targetHeight: rawHeight };
+          cube.userData = { date: day.date, count: day.contributionCount, targetHeight: rawHeight };
           sceneRef.current.add(cube);
           cubesRef.current.push(cube);
 
+          if (isSkyline && ratio > 0.5) {
+            const antGeom = new THREE.CylinderGeometry(0.02, 0.02, 2);
+            const antMat = new THREE.MeshBasicMaterial({ color: activeColor });
+            const antenna = new THREE.Mesh(antGeom, antMat);
+            antenna.position.set(cube.position.x, rawHeight, cube.position.z);
+            sceneRef.current.add(antenna);
+            extraMeshesRef.current.push(antenna);
+          }
+
           if (currentThemeModeRef.current === 'isometric') {
             const edges = new THREE.EdgesGeometry(geometry);
-            const lineMaterial = new THREE.LineBasicMaterial({ color: currentTheme.lineColor, transparent: true, opacity: 0.8 });
-            const line = new THREE.LineSegments(edges, lineMaterial);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 }));
             line.position.copy(cube.position);
             line.scale.copy(cube.scale);
             sceneRef.current.add(line);
-            linesRef.current.push(line);
+            extraMeshesRef.current.push(line);
           }
         });
       });
@@ -265,7 +295,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
           const cam = cameraRef.current as THREE.OrthographicCamera;
           cam.zoom = 0.1;
           cam.updateProjectionMatrix();
-          gsap.to(cam, { zoom: 4, duration: 1.5, ease: "power3.out", onUpdate: () => cam.updateProjectionMatrix() });
+          gsap.to(cam, { zoom: 4.5, duration: 1.5, ease: "power3.out", onUpdate: () => cam.updateProjectionMatrix() });
         } else {
           const cam = cameraRef.current;
           const targetPos = new THREE.Vector3(-80, 60, 150);
@@ -281,37 +311,32 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const scene = sceneRef.current;
-    const aspect = window.innerWidth / window.innerHeight;
-    const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 2000);
-    const orthographicCamera = new THREE.OrthographicCamera(-35 * aspect, 35 * aspect, 35, -35, -100, 1000);
-    perspectiveCameraRef.current = perspectiveCamera;
-    orthographicCameraRef.current = orthographicCamera;
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(window.devicePixelRatio);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    const perspectiveCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+    const orthographicCamera = new THREE.OrthographicCamera(-35 * (window.innerWidth / window.innerHeight), 35 * (window.innerWidth / window.innerHeight), 35, -35, -100, 1000);
+    perspectiveCameraRef.current = perspectiveCamera;
+    orthographicCameraRef.current = orthographicCamera;
+
     const controls = new OrbitControls(orthographicCamera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
     controlsRef.current = controls;
 
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, orthographicCamera);
     composer.addPass(renderPass);
     renderPassRef.current = renderPass;
-
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.6, 0.4, 0.85);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.4, 0.85);
     composer.addPass(bloomPass);
     bloomPassRef.current = bloomPass;
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
     dirLight.position.set(20, 100, 30);
     scene.add(dirLight);
 
@@ -322,20 +347,14 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       animationId = requestAnimationFrame(animate);
       const dt = clockRef.current.getDelta();
       const st = clockRef.current.getElapsedTime();
-      
       if (controlsRef.current) controlsRef.current.update();
 
-      cubesRef.current.forEach((cube, i) => {
+      cubesRef.current.forEach((cube) => {
         const target = cube.userData.targetHeight || BASE_HEIGHT;
-        if (Math.abs(cube.scale.y - target) > 0.01) {
-          cube.scale.y += (target - cube.scale.y) * 6 * dt;
-        }
-        // Update shader time for pulsing windows
-        const mat = cube.material as THREE.MeshStandardMaterial;
-        if (mat.userData.shader) mat.userData.shader.uniforms.uTime.value = st;
+        if (cube.scale.y < target) cube.scale.y += (target - cube.scale.y) * 6 * dt;
+        if (cube.material instanceof THREE.ShaderMaterial) cube.material.uniforms.uTime.value = st;
       });
 
-      // Update Spaceships
       shipsRef.current.forEach(ship => {
         ship.angle += ship.speed * dt;
         const x = Math.cos(ship.angle) * ship.radius;
@@ -343,31 +362,18 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         const y = ship.height + Math.sin(st * ship.oscillationSpeed) * ship.oscillationAmplitude;
         ship.mesh.position.set(x, y, z);
         ship.mesh.lookAt(new THREE.Vector3(Math.cos(ship.angle + 0.1) * ship.radius, y, Math.sin(ship.angle + 0.1) * ship.radius));
+        
+        // Trail logic
+        ship.history.push(ship.mesh.position.clone());
+        if (ship.history.length > 30) ship.history.shift();
+        const posAttr = ship.trail.geometry.attributes.position;
+        for (let i = 0; i < ship.history.length; i++) {
+          posAttr.setXYZ(i, ship.history[i].x, ship.history[i].y, ship.history[i].z);
+        }
+        posAttr.needsUpdate = true;
       });
 
       const currentCam = cameraRef.current || orthographicCamera;
-      raycasterRef.current.setFromCamera(mouseRef.current, currentCam);
-      const intersects = raycasterRef.current.intersectObjects(cubesRef.current);
-      
-      if (intersects.length > 0) {
-        const object = intersects[0].object as THREE.Mesh;
-        if (hoveredCubeRef.current !== object) {
-          if (hoveredCubeRef.current) {
-            (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
-            (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = currentThemeModeRef.current === 'skyline' ? 1.5 : 0;
-          }
-          hoveredCubeRef.current = object;
-          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
-          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 2;
-        }
-      } else {
-        if (hoveredCubeRef.current) {
-          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissive.copy(hoveredCubeRef.current.userData.originalEmissive);
-          (hoveredCubeRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = currentThemeModeRef.current === 'skyline' ? 1.5 : 0;
-          hoveredCubeRef.current = null;
-        }
-      }
-
       if (bloomPass.enabled) composer.render();
       else renderer.render(scene, currentCam);
     };
@@ -376,30 +382,16 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
       perspectiveCamera.aspect = aspect;
       perspectiveCamera.updateProjectionMatrix();
-      const f = 40;
-      orthographicCamera.left = -f * aspect / 2;
-      orthographicCamera.right = f * aspect / 2;
+      orthographicCamera.left = -35 * aspect;
+      orthographicCamera.right = 35 * aspect;
       orthographicCamera.updateProjectionMatrix();
       renderer.setSize(w, h);
       composer.setSize(w, h);
     };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      if (tooltipRef.current) {
-        tooltipRef.current.style.left = `${e.clientX + 15}px`;
-        tooltipRef.current.style.top = `${e.clientY + 15}px`;
-      }
-    };
-
     window.addEventListener('resize', handleResize);
-    window.addEventListener('mousemove', handleMouseMove);
     animate();
-
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', handleMouseMove);
       cancelAnimationFrame(animationId);
       renderer.dispose();
       if (containerRef.current && renderer.domElement.parentNode) containerRef.current.removeChild(renderer.domElement);
