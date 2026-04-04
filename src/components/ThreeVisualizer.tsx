@@ -216,6 +216,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const cubesRef      = useRef<THREE.Mesh[]>([]);
   const extraRef      = useRef<THREE.Object3D[]>([]);
   const shipsRef      = useRef<any[]>([]);
+  const tronRef       = useRef<any[]>([]);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
   const clockRef      = useRef(new THREE.Clock());
   const themeRef      = useRef<string>(theme);
@@ -236,6 +237,13 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       s.trail.material.dispose();
     });
     shipsRef.current = [];
+    tronRef.current.forEach(b => {
+      sceneRef.current.remove(b.light);
+      sceneRef.current.remove(b.trail);
+      b.trail.geometry.dispose();
+      b.trail.material.dispose();
+    });
+    tronRef.current = [];
   };
 
   // ── 4 ship builder functions ──────────────────────────────
@@ -442,6 +450,148 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     }
   };
 
+  // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  //  TRON GRID BIKES \u2014 glowing heads travelling along grid lines
+  // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const TRON_STEP        = 5;    // world units per grid cell (matches GridHelper 500/100)
+  const TRON_TRAIL_LEN   = 90;   // how many past positions to keep
+  const TRON_X_MIN       = -10;  // grid cell bounds in X
+  const TRON_X_MAX       =  10;
+  const TRON_Z_MIN       = -5;   // grid cell bounds in Z
+  const TRON_Z_MAX       =  5;
+
+  const makeTronTrail = (color: number): THREE.Line => {
+    const positions = new Float32Array(TRON_TRAIL_LEN * 3);
+    const alphas    = new Float32Array(TRON_TRAIL_LEN);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aAlpha',   new THREE.BufferAttribute(alphas, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(color) } },
+      vertexShader: `
+        attribute float aAlpha;
+        varying float vAlpha;
+        void main() {
+          vAlpha = aAlpha;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        varying float vAlpha;
+        void main() {
+          if (vAlpha < 0.01) discard;
+          gl_FragColor = vec4(uColor, vAlpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    return new THREE.Line(geo, mat);
+  };
+
+  const createTronBikes = () => {
+    if (themeRef.current !== 'skyline') return;
+    const colors = [0x00ffff, 0xff0088, 0xffaa00];
+    const lightIntensity = [12, 10, 10];
+    const startDirs: [number, number][] = [[1, 0], [0, 1], [-1, 0]];
+
+    for (let i = 0; i < 3; i++) {
+      const color = colors[i];
+      // Head = PointLight only (no mesh — light IS the bike)
+      const light = new THREE.PointLight(color, lightIntensity[i], 18);
+      light.position.set(
+        (Math.floor(Math.random() * (TRON_X_MAX - TRON_X_MIN)) + TRON_X_MIN) * TRON_STEP,
+        0.3,
+        (Math.floor(Math.random() * (TRON_Z_MAX - TRON_Z_MIN)) + TRON_Z_MIN) * TRON_STEP,
+      );
+      sceneRef.current.add(light);
+      const trail = makeTronTrail(color);
+      sceneRef.current.add(trail);
+
+      tronRef.current.push({
+        light,
+        trail,
+        history: [] as THREE.Vector3[],
+        // grid cell position
+        gx: Math.round(light.position.x / TRON_STEP),
+        gz: Math.round(light.position.z / TRON_STEP),
+        // current direction (cell units)
+        dx: startDirs[i][0],
+        dz: startDirs[i][1],
+        // sub-cell progress 0\u21921
+        progress: 0,
+        speed: 1.4 + Math.random() * 0.8,   // cells per second
+        turnChance: 0.35,                     // probability to turn at each intersection
+        color,
+      });
+    }
+  };
+
+  const updateTronBikes = (dt: number) => {
+    tronRef.current.forEach(bike => {
+      bike.progress += bike.speed * dt;
+
+      if (bike.progress >= 1.0) {
+        // Arrive at next cell
+        bike.gx += bike.dx;
+        bike.gz += bike.dz;
+        bike.progress -= 1.0;
+
+        // Boundary bounce / forced turn
+        const atBoundX = bike.gx <= TRON_X_MIN || bike.gx >= TRON_X_MAX;
+        const atBoundZ = bike.gz <= TRON_Z_MIN || bike.gz >= TRON_Z_MAX;
+        let forceTurn = atBoundX || atBoundZ;
+
+        // clamp
+        bike.gx = Math.max(TRON_X_MIN, Math.min(TRON_X_MAX, bike.gx));
+        bike.gz = Math.max(TRON_Z_MIN, Math.min(TRON_Z_MAX, bike.gz));
+
+        if (forceTurn || Math.random() < bike.turnChance) {
+          // 90\u00b0 turn: pick perpendicular directions (no U-turn)
+          const options: [number, number][] = [];
+          if (bike.dx !== 0) {
+            // currently moving in X \u2014 can turn to Z+/Z-
+            options.push([0, 1], [0, -1]);
+            if (!atBoundX) options.push([bike.dx, 0]); // also allow straight if not at wall
+          } else {
+            // currently moving in Z \u2014 can turn to X+/X-
+            options.push([1, 0], [-1, 0]);
+            if (!atBoundZ) options.push([0, bike.dz]);
+          }
+          const pick = options[Math.floor(Math.random() * options.length)];
+          bike.dx = pick[0];
+          bike.dz = pick[1];
+        }
+      }
+
+      // Interpolated world position
+      const wx = (bike.gx + bike.dx * bike.progress) * TRON_STEP;
+      const wz = (bike.gz + bike.dz * bike.progress) * TRON_STEP;
+      bike.light.position.set(wx, 0.3, wz);
+
+      // Trail
+      bike.history.push(new THREE.Vector3(wx, 0.3, wz));
+      if (bike.history.length > TRON_TRAIL_LEN) bike.history.shift();
+
+      const posAttr   = bike.trail.geometry.attributes.position as THREE.BufferAttribute;
+      const alphaAttr = bike.trail.geometry.attributes.aAlpha as THREE.BufferAttribute;
+      const n = bike.history.length;
+      for (let k = 0; k < TRON_TRAIL_LEN; k++) {
+        if (k < n) {
+          const p = bike.history[k];
+          posAttr.setXYZ(k, p.x, p.y, p.z);
+          alphaAttr.setX(k, (k / n) * 0.75);   // fades from 0 at tail to 0.75 at head
+        } else {
+          posAttr.setXYZ(k, 0, -9999, 0);
+          alphaAttr.setX(k, 0);
+        }
+      }
+      posAttr.needsUpdate   = true;
+      alphaAttr.needsUpdate = true;
+    });
+  };
+
   const applyTheme = (mode: string) => {
     const t = THEMES[mode as keyof typeof THEMES] || THEMES.isometric;
     themeRef.current = mode;
@@ -452,6 +602,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
 
     if (mode !== 'isometric') {
       createSpaceships();
+      createTronBikes();
     }
 
     if (mode === 'isometric') {
@@ -478,7 +629,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     buildGrid(data: any) {
       if (!data?.weeks) return;
       clearGrid();
-      if (themeRef.current === 'skyline') createSpaceships();
+      if (themeRef.current === 'skyline') { createSpaceships(); createTronBikes(); }
 
       const iso = themeRef.current === 'isometric';
       const currentTheme = THEMES[themeRef.current as keyof typeof THEMES] || THEMES.isometric;
@@ -693,6 +844,9 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         posAttr.needsUpdate   = true;
         alphaAttr.needsUpdate = true;
       });
+
+      // ── Tron grid bikes ───────────────────────────────────
+      if (tronRef.current.length > 0) updateTronBikes(dt);
 
       // ── Raycaster: hover tooltip ─────────────────────────
       if (cubesRef.current.length > 0) {
