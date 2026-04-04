@@ -250,7 +250,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const buildInterceptor = () => {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8, metalness: 0.6 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0x00ccee, roughness: 0.5, metalness: 0.8 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0x00ccee, emissive: 0x00ccee, emissiveIntensity: 2.5 });
     // Long body
     g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 0.42), mat)));
     // Nose tip
@@ -279,7 +279,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const buildHoverDrone = () => {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.7, metalness: 0.7 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0x220033, emissive: 0x550088, emissiveIntensity: 0.3 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0x8800ff, emissive: 0x8800ff, emissiveIntensity: 2.5 });
     // Flat hex base
     g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.08, 6), mat));
     // Central dome
@@ -302,7 +302,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
   const buildTriWingScout = () => {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x0d0d1a, roughness: 0.6, metalness: 0.7 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0x001a00, emissive: 0x003300, emissiveIntensity: 0.35 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 2.5 });
     // Central node
     g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.3), accent));
     // 3 wings at 120°
@@ -323,7 +323,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x151520, roughness: 0.75, metalness: 0.5 });
     const core = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42),
-      new THREE.MeshStandardMaterial({ color: 0x110011, emissive: 0x440022, emissiveIntensity: 0.3 }));
+      new THREE.MeshStandardMaterial({ color: 0xff0066, emissive: 0xff0066, emissiveIntensity: 2.5 }));
     g.add(core);
     // 4 corner strut posts
     [[0.58,0,0.58],[-0.58,0,0.58],[0.58,0,-0.58],[-0.58,0,-0.58]].forEach(([ox,,oz]) => {
@@ -352,7 +352,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aAlpha',   new THREE.BufferAttribute(alphas, 1));
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(color) } },
+      uniforms: { uColor: { value: new THREE.Color(0xffffff) } },
       vertexShader: `
         attribute float aAlpha;
         varying float vAlpha;
@@ -412,7 +412,7 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
       light.position.set(0, 0.5, 0);
       group.add(light);
 
-      const trail = makeTrail(trailColors[i]);
+      const trail = makeTrail(0xffffff);
       const [startPos, endPos] = randomPath(spread);
 
       // Orbit params (used when mode = 'orbit')
@@ -446,6 +446,12 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         mode: i % 2 === 0 ? 'orbit' : 'path' as 'orbit' | 'path',
         modeSwitchTimer: 4 + Math.random() * 6, // seconds until switch
         modeTimer: 0,
+        // State Machine
+        state: 'flying' as 'flying' | 'landing' | 'resting' | 'takeoff',
+        targetTower: null as THREE.Mesh | null,
+        landingTimer: 0,
+        timeUntilLand: 15 + Math.random() * 20, // 15-35s fly duration
+        startLandPos: new THREE.Vector3(),
       });
     }
   };
@@ -605,7 +611,6 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
     if (gridHelperRef.current) { scene.remove(gridHelperRef.current); gridHelperRef.current = null; }
 
     if (mode !== 'isometric') {
-      createSpaceships();
       createTronBikes();
     }
 
@@ -767,62 +772,126 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         if (m.uniforms?.uTime) m.uniforms.uTime.value = st;
       });
 
-      // ── Spaceships: hybrid orbit + path-through-city flight ──
+      // ── Spaceships: state-machine based flight and helipad system ──
       shipsRef.current.forEach(ship => {
-        ship.modeTimer += dt;
+        let pos = new THREE.Vector3();
+        let lookTarget = new THREE.Vector3();
+        const dtCurrent = dt;
 
-        let pos: THREE.Vector3;
-        let lookTarget: THREE.Vector3;
+        if (ship.state === 'resting') {
+          // --- RESTING: Sits on tower top ---
+          if (ship.targetTower) {
+            const h = ship.targetTower.scale.y;
+            pos.set(ship.targetTower.position.x, h + 0.1, ship.targetTower.position.z);
+            lookTarget.copy(pos).add(new THREE.Vector3(1, 0, 0)); // face forward
+          }
+          ship.landingTimer -= dtCurrent;
+          if (ship.landingTimer <= 0) {
+            ship.state = 'takeoff';
+            ship.landingTimer = 2.0; // 2s takeoff
+            ship.startLandPos.copy(ship.group.position);
+          }
+        } else if (ship.state === 'landing') {
+          // --- LANDING: Spiral down to tower ---
+          ship.landingTimer -= dtCurrent;
+          const t = 1.0 - (ship.landingTimer / 2.5); // 2.5s landing duration
+          if (ship.targetTower) {
+            const h = ship.targetTower.scale.y;
+            const target = new THREE.Vector3(ship.targetTower.position.x, h + 0.1, ship.targetTower.position.z);
+            
+            // Linear interpolate base pos
+            pos.lerpVectors(ship.startLandPos, target, t);
+            // Add spiral
+            const r = (1.0 - t) * 6.0;
+            const angle = t * Math.PI * 10; // 5 full rotations
+            pos.x += Math.cos(angle) * r;
+            pos.z += Math.sin(angle) * r;
 
-        if (ship.mode === 'orbit') {
-          // ─ Elliptic orbit weaving between buildings ─
-          ship.orbitAngle += ship.orbitSpeed * dt;
-          const ox = Math.cos(ship.orbitAngle) * ship.orbitRadius;
-          const oz = Math.sin(ship.orbitAngle) * ship.orbitRadiusZ;
-          const oy = ship.orbitHeight + Math.sin(st * ship.orbitOscFreq) * ship.orbitOscAmp;
-          pos = new THREE.Vector3(ox, oy, oz);
-
-          const nextAngle = ship.orbitAngle + 0.1;
-          lookTarget = new THREE.Vector3(
-            Math.cos(nextAngle) * ship.orbitRadius,
-            oy,
-            Math.sin(nextAngle) * ship.orbitRadiusZ,
-          );
-
-          // Switch to path mode after modeSwitchTimer
-          if (ship.modeTimer >= ship.modeSwitchTimer) {
-            ship.mode = 'path';
-            ship.modeTimer = 0;
-            ship.modeSwitchTimer = 5 + Math.random() * 8;
+            // Look slightly ahead in spiral
+            const nextT = Math.min(t + 0.05, 1.0);
+            const nextPos = new THREE.Vector3().lerpVectors(ship.startLandPos, target, nextT);
+            const nextR = (1.0 - nextT) * 6.0;
+            const nextAngle = nextT * Math.PI * 10;
+            nextPos.x += Math.cos(nextAngle) * nextR;
+            nextPos.z += Math.sin(nextAngle) * nextR;
+            lookTarget = nextPos;
+          }
+          if (ship.landingTimer <= 0) {
+            ship.state = 'resting';
+            ship.landingTimer = 3.0;
+          }
+        } else if (ship.state === 'takeoff') {
+          // --- TAKEOFF: Fly straight up ---
+          ship.landingTimer -= dtCurrent;
+          const t = 1.0 - (ship.landingTimer / 2.0);
+          const target = ship.startLandPos.clone().add(new THREE.Vector3(0, 12, 0));
+          pos.lerpVectors(ship.startLandPos, target, t);
+          lookTarget = target;
+          if (ship.landingTimer <= 0) {
+            if (ship.targetTower) ship.targetTower.userData.isHelipad = false;
+            ship.targetTower = null;
+            ship.state = 'flying';
+            ship.timeUntilLand = 20 + Math.random() * 20;
+            ship.history = []; // Clear history to prevent long teleport lines
             const [s, e] = randomPath(ship.spread);
             ship.startPos = s; ship.endPos = e; ship.progress = 0;
           }
         } else {
-          // ─ Path-based pass-through-city ─
-          ship.progress += ship.speed * dt;
+          // --- FLYING: Normal mode ---
+          ship.modeTimer += dtCurrent;
+          ship.timeUntilLand -= dtCurrent;
 
-          if (ship.progress >= 1.0) {
-            // Done with path — switch to orbit mode
-            ship.mode = 'orbit';
-            ship.modeTimer = 0;
-            ship.modeSwitchTimer = 6 + Math.random() * 10;
-            ship.orbitAngle = Math.random() * Math.PI * 2;
-            ship.history = [];
-            ship.progress = 0;
+          if (ship.timeUntilLand <= 0 && cubesRef.current.length > 0) {
+            // Pick a tall tower that isn't occupied
+            const candidates = cubesRef.current.filter(c => c.userData.targetH > 5 && !c.userData.isHelipad);
+            if (candidates.length > 0) {
+              const tower = candidates[Math.floor(Math.random() * candidates.length)];
+              tower.userData.isHelipad = true;
+              ship.targetTower = tower;
+              ship.state = 'landing';
+              ship.landingTimer = 2.5;
+              ship.startLandPos.copy(ship.group.position);
+              // continue current frame as flying or snap to start of landing? 
+              // for simplicity, we transition next frame.
+            } else {
+              ship.timeUntilLand = 5; // retry in 5s
+            }
           }
 
-          const t = ship.progress;
-          pos = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, t);
-          const dir = new THREE.Vector3().subVectors(ship.endPos, ship.startPos).normalize();
-          const perp = new THREE.Vector3(-dir.z, 0, dir.x);
-          const lateralOff = Math.sin(t * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
-          pos.addScaledVector(perp, lateralOff);
-          pos.y += Math.sin(t * Math.PI * 3) * 1.8;
-
-          const ahead = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, Math.min(t + 0.06, 1.0));
-          const aheadOff = lateralOff + Math.sin((t + 0.06) * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
-          ahead.addScaledVector(perp, aheadOff);
-          lookTarget = ahead;
+          if (ship.mode === 'orbit') {
+            ship.orbitAngle += ship.orbitSpeed * dtCurrent;
+            const ox = Math.cos(ship.orbitAngle) * ship.orbitRadius;
+            const oz = Math.sin(ship.orbitAngle) * ship.orbitRadiusZ;
+            const oy = ship.orbitHeight + Math.sin(st * ship.orbitOscFreq) * ship.orbitOscAmp;
+            pos = new THREE.Vector3(ox, oy, oz);
+            const nextAngle = ship.orbitAngle + 0.1;
+            lookTarget = new THREE.Vector3(Math.cos(nextAngle) * ship.orbitRadius, oy, Math.sin(nextAngle) * ship.orbitRadiusZ);
+            if (ship.modeTimer >= ship.modeSwitchTimer) {
+              ship.mode = 'path'; ship.modeTimer = 0; ship.modeSwitchTimer = 5 + Math.random() * 8;
+              const [s, e] = randomPath(ship.spread);
+              ship.startPos = s; ship.endPos = e; ship.progress = 0;
+              ship.history = []; // fix teleport
+            }
+          } else {
+            ship.progress += ship.speed * dtCurrent;
+            if (ship.progress >= 1.0) {
+              ship.mode = 'orbit'; ship.modeTimer = 0; ship.modeSwitchTimer = 6 + Math.random() * 10;
+              ship.orbitAngle = Math.random() * Math.PI * 2;
+              ship.progress = 0;
+              ship.history = []; // fix teleport
+            }
+            const t = ship.progress;
+            pos = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, t);
+            const dir = new THREE.Vector3().subVectors(ship.endPos, ship.startPos).normalize();
+            const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+            const lateralOff = Math.sin(t * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
+            pos.addScaledVector(perp, lateralOff);
+            pos.y += Math.sin(t * Math.PI * 3) * 1.8;
+            const ahead = new THREE.Vector3().lerpVectors(ship.startPos, ship.endPos, Math.min(t + 0.06, 1.0));
+            const aheadOff = lateralOff + Math.sin((t + 0.06) * ship.sineFreq * Math.PI * 2) * ship.sineAmp;
+            ahead.addScaledVector(perp, aheadOff);
+            lookTarget = ahead;
+          }
         }
 
         ship.group.position.copy(pos);
@@ -831,21 +900,20 @@ export const ThreeVisualizer = forwardRef<ThreeVisualizerRef, ThreeVisualizerPro
         // ─ Trail update ─
         ship.history.push(pos.clone());
         if (ship.history.length > TRAIL_LEN) ship.history.shift();
-
-        const posAttr   = ship.trail.geometry.attributes.position as THREE.BufferAttribute;
+        const posAttr = ship.trail.geometry.attributes.position as THREE.BufferAttribute;
         const alphaAttr = ship.trail.geometry.attributes.aAlpha as THREE.BufferAttribute;
         const n = ship.history.length;
         for (let k = 0; k < TRAIL_LEN; k++) {
           if (k < n) {
             const p = ship.history[k];
             posAttr.setXYZ(k, p.x, p.y, p.z);
-            alphaAttr.setX(k, (k / n) * 0.65);
+            alphaAttr.setX(k, (k / n) * 0.7);
           } else {
             posAttr.setXYZ(k, 0, -9999, 0);
             alphaAttr.setX(k, 0);
           }
         }
-        posAttr.needsUpdate   = true;
+        posAttr.needsUpdate = true;
         alphaAttr.needsUpdate = true;
       });
 
